@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "pm",
-        "width": 800,
-        "height": 600
+        "title": "PM",
+        "minWidth": 1200,
+        "minHeight": 800,
+        "closable": true,
+        "minimizable": true
       }
     ],
     "security": {

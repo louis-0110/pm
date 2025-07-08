@@ -8,9 +8,14 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    Left: typeof import('./src/components/Left.vue')['default']
     NConfigProvider: typeof import('naive-ui')['NConfigProvider']
     NGlobalStyle: typeof import('naive-ui')['NGlobalStyle']
     NGradientText: typeof import('naive-ui')['NGradientText']
     NImage: typeof import('naive-ui')['NImage']
+    NScrollbar: typeof import('naive-ui')['NScrollbar']
+    NSplit: typeof import('naive-ui')['NSplit']
+    PD: typeof import('./src/components/PD.vue')['default']
+    PL: typeof import('./src/components/PL.vue')['default']
   }
 }
