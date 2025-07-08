@@ -1,28 +1,30 @@
 <template>
   <main class="main-container">
-    <n-split
-      direction="horizontal"
-      style="height: 100%"
-      :default-size="0.25"
-      :max="0.5"
-      :min="0.25"
-      :resize-trigger-size="2"
-    >
+    <n-split direction="horizontal" style="height: 100%" :default-size="0.25" :max="0.5" :min="0.25"
+      :resize-trigger-size="2">
       <template #1>
         <PL></PL>
       </template>
       <template #2>
-        <PD></PD>
+        <section class="right-container">
+          <ToolBar></ToolBar>
+          <router-view v-slot="{ Component }">
+            <component :is="Component" />
+          </router-view>
+        </section>
       </template>
     </n-split>
   </main>
 </template>
 
 <script setup lang="ts">
-import PD from './components/PD.vue'
 import PL from './components/PL.vue'
-import { ref } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
+import db from './db/index'
+import ToolBar from '@/components/ToolBar.vue'
+
+db.execute('CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, description TEXT, url TEXT, created_at TEXT, updated_at TEXT)')
+
+console.log('db', db)
 </script>
 
 <style scoped>

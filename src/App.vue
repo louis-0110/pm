@@ -37,4 +37,8 @@ body,
   -moz-user-select: -moz-none;
   -webkit-user-select: none;
 }
+
+.n-modal-mask{
+  background-color: rgba(255, 255, 255, .8);
+}
 </style>

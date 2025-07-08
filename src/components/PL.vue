@@ -1,20 +1,11 @@
 <template>
   <div class="pl-box">
     <div class="logo-wrap">
-      <img
-        src=""
-        alt=""
-        width="66"
-        height="66"
-        style="margin-right: 10px"
-      />
+      <img src="@/assets/logo.png" alt="" width="66" height="66" style="margin-right: 10px;border-radius: 10px;" />
     </div>
     <n-scrollbar class="pm-name-wrap">
-      <div
-        class="p-name"
-        v-for="item in pList"
-      >
-        {{ item }}
+      <div class="p-name" v-for="item in pList">
+        <router-link :to="'/pd/' + item">项目{{ item }}</router-link>
       </div>
     </n-scrollbar>
   </div>
@@ -31,7 +22,7 @@ const pList = 20
   height: 100%;
   padding: 10px;
   padding-right: 0px;
-  background-color: #fff;
+  background-color: #f9fcfe;
   box-sizing: border-box;
 }
 

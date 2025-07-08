@@ -13,10 +13,8 @@
     "windows": [
       {
         "title": "PM",
-        "minWidth": 1200,
-        "minHeight": 800,
-        "closable": true,
-        "minimizable": true
+        "minWidth": 1000,
+        "minHeight": 700
       }
     ],
     "security": {
