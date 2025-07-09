@@ -1,7 +1,8 @@
 <template>
   <main class="main-container">
-    <n-split direction="horizontal" style="height: 100%" :default-size="0.25" :max="0.5" :min="0.25"
-      :resize-trigger-size="2">
+    <WindowBar></WindowBar>
+    <n-split direction="horizontal" style="height: 100%" :default-size="0.25" :max="0.5" :min="0"
+      :resize-trigger-size="1">
       <template #1>
         <PL></PL>
       </template>
@@ -13,6 +14,10 @@
           </router-view>
         </section>
       </template>
+      <template #resize-trigger>
+        <div class="resize-trigger">
+        </div>
+      </template>
     </n-split>
   </main>
 </template>
@@ -21,8 +26,10 @@
 import PL from './components/PL.vue'
 import db from './db/index'
 import ToolBar from '@/components/ToolBar.vue'
+import WindowBar from './components/WindowBar.vue'
+import { MoreVertical24Filled } from '@vicons/fluent'
 
-db.execute('CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, description TEXT, url TEXT, created_at TEXT, updated_at TEXT)')
+db.execute(`CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, description TEXT, url TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')))`)
 
 console.log('db', db)
 </script>
@@ -32,5 +39,28 @@ console.log('db', db)
   width: 100%;
   height: 100%;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.n-split__resize-trigger-wrapper) {
+  position: relative;
+}
+
+:deep(.n-split__resize-trigger-wrapper:hover) {
+  background-color: rgb(51, 96, 242);
+}
+
+.resize-trigger {
+  background-color: transparent;
+  position: absolute;
+  transform: translateX(-50%);
+  height: 100%;
+  width: 3px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 </style>

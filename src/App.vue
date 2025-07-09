@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { window } from '@tauri-apps/api';
 import Home from './Home.vue'
 import type { GlobalThemeOverrides } from 'naive-ui'
 
@@ -10,7 +11,9 @@ const theme: GlobalThemeOverrides = {
 <template>
   <n-config-provider :theme-overrides="theme">
     <n-global-style />
-    <Home />
+    <n-message-provider>
+      <Home />
+    </n-message-provider>
   </n-config-provider>
 </template>
 <style>
@@ -27,6 +30,7 @@ const theme: GlobalThemeOverrides = {
   -webkit-text-size-adjust: 100%;
   overflow: hidden;
 }
+
 :root,
 body,
 #app,
@@ -38,7 +42,7 @@ body,
   -webkit-user-select: none;
 }
 
-.n-modal-mask{
+.n-modal-mask {
   background-color: rgba(255, 255, 255, .8);
 }
 </style>

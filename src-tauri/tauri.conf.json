@@ -14,7 +14,8 @@
       {
         "title": "PM",
         "minWidth": 1000,
-        "minHeight": 700
+        "minHeight": 700,
+        "decorations": false
       }
     ],
     "security": {

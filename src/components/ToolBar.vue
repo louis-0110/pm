@@ -2,14 +2,12 @@
   <div class="tool-bar">
     <n-input style="width: 400px;" placeholder="搜索">
       <template #prefix>
-        <n-icon :component="FlashOutline" />
+        <n-icon :component="Search12Regular" />
       </template>
     </n-input>
 
     <n-button circle style="margin-left: auto" @click="showModal = true">
-      <n-icon-wrapper :size="24" border-radius="50%">
-        <n-icon :size="18" :component="Add16Filled" />
-      </n-icon-wrapper>
+      <n-icon :size="18" :component="Add16Filled" />
     </n-button>
 
     <div class="more">
@@ -30,8 +28,8 @@
 </template>
 
 <script setup>
-import { Add16Filled, MoreHorizontal20Regular } from '@vicons/fluent'
-import {ref} from 'vue'
+import { Add16Filled, MoreHorizontal20Regular, Search12Regular } from '@vicons/fluent'
+import { ref } from 'vue'
 
 const showModal = ref(false)
 </script>
