@@ -4,9 +4,9 @@
       <template #prefix>
         <n-icon :component="Search12Regular" />
       </template>
-    </n-input> -->
+</n-input> -->
 
-    <n-button circle style="margin-left: auto" @click="showModal = true">
+    <n-button circle style="margin-left: auto" @click="test">
       <n-icon :size="18" :component="Add16Filled" />
     </n-button>
 
@@ -30,8 +30,19 @@
 <script setup>
 import { Add16Filled, MoreHorizontal20Regular, Search12Regular } from '@vicons/fluent'
 import { ref } from 'vue'
+import { Command } from '@tauri-apps/plugin-shell';
 
 const showModal = ref(false)
+
+async function test() {
+  let result = await Command.create('exec-sh', [
+    '-c',
+    "echo 'Hello World!'",
+  ]).execute();
+  console.log(result);
+}
+
+
 </script>
 
 <style scoped>
