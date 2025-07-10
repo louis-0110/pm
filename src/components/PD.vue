@@ -1,38 +1,188 @@
 <template>
-    <div>
-        {{ $route.params.id }}
+    <div class="pd-container">
+        <div>
+            {{ projectInfo?.name }}
+        </div>
+        <div> {{ projectInfo?.description }}</div>
 
-        <n-button @click="getProjectPath">按钮</n-button>
+        <n-button @click="addRepository">添加仓库</n-button>
+
+        <section class="repository-list-wrap">
+            <div class="repository-item" v-for="item in repositoryList">
+                <div class="repository-item-name">
+                    <span> {{ item.name }}
+                    </span>
+                    <n-popconfirm negative-text="取消" positive-text="确定" @positive-click="deleteRepository(item)">
+                        <span>是否删除该仓库?</span>
+                        <template #trigger>
+                            <n-button circle size="small">
+                                <n-icon :size="12" :component="Close" />
+                            </n-button>
+                        </template>
+
+                    </n-popconfirm>
+
+                </div>
+                <div>
+                    <span style="color: #f40;width: 20px;display: inline-block" v-html="icon_git"
+                        v-if="item.vcs === 'git'"></span>
+                    <span style="width: 20px;display: inline-block" v-html="icon_svn" v-if="item.vcs === 'svn'"></span>
+                </div>
+
+            </div>
+        </section>
     </div>
+
+    <n-modal v-model:show="isShowRepository">
+        <n-card style="width: 600px" title="仓库信息" :bordered="false" size="huge" role="dialog" aria-modal="true">
+            <n-form ref="formRef" :model="newRepository" label-placement="left">
+                <n-form-item label="仓库名称" path="name">
+                    <n-input v-model:value="newRepository.name" placeholder="" />
+                </n-form-item>
+                <n-form-item label="文件地址" path="url">
+                    <n-input v-model:value="newRepository.path" placeholder="">
+                        <template #suffix>
+                            <n-icon :size="18">
+                                <img v-if="newRepository.vcs === 'git'" :src="icon_git" alt="" srcset="">
+                                <img v-if="newRepository.vcs === 'svn'" :src="icon_svn" alt="" srcset="">
+                            </n-icon>
+                        </template>
+                    </n-input>
+                </n-form-item>
+                <n-form-item>
+                    <n-button @click="onCreateNewRepository">创建</n-button>
+                </n-form-item>
+            </n-form>
+        </n-card>
+    </n-modal>
 </template>
 
 <script setup lang="ts">
+import db from '@/db'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readDir } from '@tauri-apps/plugin-fs'
-import { ref } from 'vue'
+import icon_git from '@/assets/git.svg?raw'
+import icon_svn from '@/assets/svn.svg?raw'
+import { ref, watchEffect } from 'vue'
+import { useRoute } from 'vue-router'
+import { useMessage } from 'naive-ui'
+import { Close } from '@vicons/ionicons5'
 
-//版本管理工具
-const vcs = ref('')
+console.log(icon_git)
+const route = useRoute()
+const projectInfo = ref<any>()
+
+const message = useMessage()
+const getProjectInfo = async (id: string) => {
+    const res: any = await db.select('SELECT * FROM projects where id = $1', [id])
+    projectInfo.value = res[0]
+}
+
+const repositoryList = ref<any>()
+const getRepositories = async (id: string) => {
+    const res = await db.select('SELECT * FROM repositories where project_id = $1', [id])
+    repositoryList.value = res
+}
+
+const newRepository = ref({
+    name: '',
+    path: '',
+    vcs: '',
+    project_id: route.params.id,
+})
+
+watchEffect(() => {
+    if (route.params.id) {
+        getProjectInfo(route.params.id as string)
+        getRepositories(route.params.id as string)
+        newRepository.value.project_id = route.params.id
+    }
+})
+
+async function onCreateNewRepository() {
+    const res = await db.execute('INSERT OR IGNORE INTO repositories (name, path, project_id, vcs) VALUES ($1, $2, $3, $4) ', [newRepository.value.name, newRepository.value.path, newRepository.value.project_id, newRepository.value.vcs])
+    if (res.rowsAffected < 1) {
+        return message.error('创建失败')
+    }
+    newRepository.value.name = ''
+    newRepository.value.path = ''
+    newRepository.value.vcs = ''
+    isShowRepository.value = false
+    getRepositories(projectInfo.value.id)
+}
+
+const isShowRepository = ref(false)
 // 获取项目路径
-async function getProjectPath() {
+async function addRepository() {
     const result = await open({
         multiple: false,
         directory: true,
     })
     console.log(result)
     if (result) {
+        //版本管理工具
+        let vcs = ''
         const entries = await readDir(result)
         for (const entry of entries) {
             if (entry.name == '.git') {
-                vcs.value = 'git'
+                vcs = 'git'
                 break
             } else if (entry.name == '.svn') {
-                vcs.value = 'svn'
+                vcs = 'svn'
                 break
             }
         }
+
+        newRepository.value.path = result
+        newRepository.value.vcs = vcs
+        isShowRepository.value = true
     }
 }
+
+
+const deleteRepository = async (item: any) => {
+    const res = await db.execute('DELETE FROM repositories where id = $1', [item.id])
+    console.log(res)
+
+    getRepositories(projectInfo.value.id)
+}
+
 </script>
 
-<style scoped></style>
+<style scoped>
+.pd-container {
+    margin: 10px;
+    padding: 10px;
+    box-sizing: border-box;
+    border-radius: 6px;
+    background-color: #f9fcfe;
+    height: 100%;
+}
+
+.repository-item {
+    width: 200px;
+    height: 80px;
+    box-shadow: 0 2px 12px 0 rgb(0 0 0 / 10%);
+    border-radius: 8px;
+}
+
+.repository-list-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 20px 0;
+}
+
+.repository-list-wrap .repository-item {
+    padding: 10px;
+}
+
+.repository-item-name {
+    display: flex;
+    justify-content: space-between;
+}
+
+.repository-item img {
+    width: 22px;
+}
+</style>

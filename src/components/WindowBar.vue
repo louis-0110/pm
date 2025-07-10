@@ -1,20 +1,21 @@
 <template>
   <div data-tauri-drag-region class="titlebar">
     <div class="titlebar-button" id="titlebar-minimize" @click="appWindow.minimize">
-      <img src="https://api.iconify.design/mdi:window-minimize.svg" alt="minimize" />
+      <n-icon :size="18" :component="RemoveOutline" />
     </div>
     <div class="titlebar-button" id="titlebar-maximize" @click="appWindow.toggleMaximize">
-      <img src="https://api.iconify.design/mdi:window-maximize.svg" alt="maximize" />
+      <n-icon :size="18" :component="Maximize16Regular" />
     </div>
     <div class="titlebar-button" id="titlebar-close" @click="appWindow.close">
-      <img src="https://api.iconify.design/mdi:close.svg" alt="close" />
+      <n-icon :size="18" :component="Close" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { getCurrentWindow } from '@tauri-apps/api/window';
-
+import { Close, RemoveOutline } from '@vicons/ionicons5'
+import { Maximize16Regular } from '@vicons/fluent'
 const appWindow = getCurrentWindow();
 </script>
 
@@ -39,5 +40,10 @@ const appWindow = getCurrentWindow();
 
 .titlebar-button:hover {
   background: #e6ebea;
+}
+
+#titlebar-close.titlebar-button:hover {
+  background: rgb(228, 31, 31);
+  color: #ffffff;
 }
 </style>

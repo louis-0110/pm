@@ -1,7 +1,7 @@
 <template>
   <main class="main-container">
     <WindowBar></WindowBar>
-    <n-split direction="horizontal" style="height: 100%" :default-size="0.25" :max="0.5" :min="0"
+    <n-split direction="horizontal" style="height: 100%" :default-size="0.25" :max="0.5" min="200px"
       :resize-trigger-size="1">
       <template #1>
         <PL></PL>
@@ -24,14 +24,12 @@
 
 <script setup lang="ts">
 import PL from './components/PL.vue'
-import db from './db/index'
 import ToolBar from '@/components/ToolBar.vue'
 import WindowBar from './components/WindowBar.vue'
-import { MoreVertical24Filled } from '@vicons/fluent'
 
-db.execute(`CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, description TEXT, url TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')))`)
+import createTable from '@/db/createTable'
 
-console.log('db', db)
+createTable()
 </script>
 
 <style scoped>
@@ -62,5 +60,11 @@ console.log('db', db)
   flex-direction: column;
   justify-content: center;
   align-items: center;
+}
+
+.right-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 </style>

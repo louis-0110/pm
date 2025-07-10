@@ -1,10 +1,10 @@
 <template>
   <div class="tool-bar">
-    <n-input style="width: 400px;" placeholder="搜索">
+    <!-- <n-input style="width: 400px;" placeholder="搜索">
       <template #prefix>
         <n-icon :component="Search12Regular" />
       </template>
-    </n-input>
+    </n-input> -->
 
     <n-button circle style="margin-left: auto" @click="showModal = true">
       <n-icon :size="18" :component="Add16Filled" />
@@ -13,7 +13,7 @@
     <div class="more">
       <n-icon :size="18" :component="MoreHorizontal20Regular" />
     </div>
-    <n-modal v-model:show="showModal">
+    <!-- <n-modal v-model:show="showModal">
       <n-card style="width: 600px" title="模态框" :bordered="false" size="huge" role="dialog" aria-modal="true">
         <template #header-extra>
           噢！
@@ -23,7 +23,7 @@
           尾部
         </template>
       </n-card>
-    </n-modal>
+    </n-modal> -->
   </div>
 </template>
 
