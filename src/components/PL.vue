@@ -7,7 +7,7 @@
                     <n-icon :component="Search20Regular" />
                 </template>
             </n-input>
-            <n-button style="margin-left: 10px;" @click="showModal = true">
+            <n-button circle style="margin-left: 10px;" @click="showModal = true">
                 <template #icon> + </template>
             </n-button>
         </div>
@@ -24,7 +24,7 @@
             <template #header-extra>
                 <n-icon style="cursor: pointer;" :component="Close" @click="showModal = false" />
             </template>
-            <n-form ref="formRef" :model="model" label-placement="left">
+            <n-form ref="formRef" :model="model" label-placement="left" @submit.prevent="onCreateNewProject">
                 <n-form-item label="项目名称" path="projectName">
                     <n-input v-model:value="model.projectName" placeholder="" />
                 </n-form-item>
@@ -32,7 +32,7 @@
                     <n-input type="textarea" v-model:value="model.description" placeholder="" />
                 </n-form-item>
                 <n-form-item>
-                    <n-button @click="onCreateNewProject">创建</n-button>
+                    <n-button attr-type="submit">创建</n-button>
                 </n-form-item>
             </n-form>
             <template #footer>
@@ -70,8 +70,8 @@ async function getProjectList() {
 }
 
 const model = ref({
-    projectName: null,
-    description: null,
+    projectName: '',
+    description: '',
 })
 
 const message = useMessage()
@@ -84,6 +84,8 @@ const onCreateNewProject = async () => {
         return message.error('创建失败,名称已存在')
     }
     message.success('创建成功')
+    model.value.description = ''
+    model.value.projectName = ''
     showModal.value = false
     getProjectList()
 }
@@ -138,9 +140,10 @@ const searchProject = () => {
     cursor: pointer;
 }
 
-.pm-name-wrap .p-name + .p-name {
+.pm-name-wrap .p-name+.p-name {
     margin-top: 4px;
 }
+
 .pm-name-wrap .p-name:hover,
 .pm-name-wrap .p-name.active {
     background-color: #edf7fe;

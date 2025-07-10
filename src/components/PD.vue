@@ -3,15 +3,14 @@
         <div>
             {{ projectInfo?.name }}
         </div>
-        <div> {{ projectInfo?.description }}</div>
+        <div>{{ projectInfo?.description }}</div>
 
         <n-button @click="addRepository">添加仓库</n-button>
 
         <section class="repository-list-wrap">
             <div class="repository-item" v-for="item in repositoryList">
                 <div class="repository-item-name">
-                    <span> {{ item.name }}
-                    </span>
+                    <span> {{ item.name }} </span>
                     <n-popconfirm negative-text="取消" positive-text="确定" @positive-click="deleteRepository(item)">
                         <span>是否删除该仓库?</span>
                         <template #trigger>
@@ -19,38 +18,33 @@
                                 <n-icon :size="12" :component="Close" />
                             </n-button>
                         </template>
-
                     </n-popconfirm>
-
                 </div>
                 <div>
-                    <span style="color: #f40;width: 20px;display: inline-block" v-html="icon_git"
+                    <span style="color: #f40; width: 20px; display: inline-block" v-html="icon_git"
                         v-if="item.vcs === 'git'"></span>
-                    <span style="width: 20px;display: inline-block" v-html="icon_svn" v-if="item.vcs === 'svn'"></span>
+                    <span style="width: 20px; display: inline-block" v-html="icon_svn" v-if="item.vcs === 'svn'"></span>
                 </div>
-
             </div>
         </section>
     </div>
 
     <n-modal v-model:show="isShowRepository">
         <n-card style="width: 600px" title="仓库信息" :bordered="false" size="huge" role="dialog" aria-modal="true">
-            <n-form ref="formRef" :model="newRepository" label-placement="left">
+            <n-form ref="formRef" :model="newRepository" label-placement="left" @submit.prevent="onCreateNewRepository">
                 <n-form-item label="仓库名称" path="name">
                     <n-input v-model:value="newRepository.name" placeholder="" />
                 </n-form-item>
                 <n-form-item label="文件地址" path="url">
                     <n-input v-model:value="newRepository.path" placeholder="">
                         <template #suffix>
-                            <n-icon :size="18">
-                                <img v-if="newRepository.vcs === 'git'" :src="icon_git" alt="" srcset="">
-                                <img v-if="newRepository.vcs === 'svn'" :src="icon_svn" alt="" srcset="">
-                            </n-icon>
+                            <span v-if="newRepository.vcs" style="color: #f40; width: 20px; display: inline-grid;"
+                                v-html="newRepository.vcs === 'svn' ? icon_svn : icon_git"></span>
                         </template>
                     </n-input>
                 </n-form-item>
                 <n-form-item>
-                    <n-button @click="onCreateNewRepository">创建</n-button>
+                    <n-button style="margin-left: auto;" type="info" attr-type="submit">创建</n-button>
                 </n-form-item>
             </n-form>
         </n-card>
@@ -100,7 +94,15 @@ watchEffect(() => {
 })
 
 async function onCreateNewRepository() {
-    const res = await db.execute('INSERT OR IGNORE INTO repositories (name, path, project_id, vcs) VALUES ($1, $2, $3, $4) ', [newRepository.value.name, newRepository.value.path, newRepository.value.project_id, newRepository.value.vcs])
+    const res = await db.execute(
+        'INSERT OR IGNORE INTO repositories (name, path, project_id, vcs) VALUES ($1, $2, $3, $4) ',
+        [
+            newRepository.value.name,
+            newRepository.value.path,
+            newRepository.value.project_id,
+            newRepository.value.vcs,
+        ]
+    )
     if (res.rowsAffected < 1) {
         return message.error('创建失败')
     }
@@ -139,14 +141,12 @@ async function addRepository() {
     }
 }
 
-
 const deleteRepository = async (item: any) => {
     const res = await db.execute('DELETE FROM repositories where id = $1', [item.id])
     console.log(res)
 
     getRepositories(projectInfo.value.id)
 }
-
 </script>
 
 <style scoped>
@@ -162,8 +162,13 @@ const deleteRepository = async (item: any) => {
 .repository-item {
     width: 200px;
     height: 80px;
-    box-shadow: 0 2px 12px 0 rgb(0 0 0 / 10%);
     border-radius: 8px;
+    border: 1px solid #eaeaea;
+    transition: all 0.3s;
+}
+
+.repository-item:hover {
+    box-shadow: 0 2px 12px 0 rgb(0 0 0 / 10%);
 }
 
 .repository-list-wrap {
