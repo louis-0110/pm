@@ -55,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import db from '@/db'
+import dbFn from '@/db'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readDir } from '@tauri-apps/plugin-fs'
 import icon_git from '@/assets/git.svg?raw'
@@ -70,6 +70,8 @@ import { MoreHorizontal20Regular } from '@vicons/fluent'
 
 import { Command } from '@tauri-apps/plugin-shell';
 import { invoke } from '@tauri-apps/api/core';
+
+const db = await dbFn
 
 async function openPjWithVscode(path: string) {
     let result = await Command.create('exec-sh', ['-Command', 'code', path]).execute();

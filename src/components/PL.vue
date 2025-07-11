@@ -47,11 +47,11 @@
 <script setup lang="ts">
 import { Search20Regular, Add16Filled } from '@vicons/fluent'
 import { Close } from '@vicons/ionicons5'
-import db from '@/db/index'
+import dbFn from '@/db'
 import { onMounted, ref, useTemplateRef } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useRouter } from 'vue-router'
-
+const db = await dbFn
 const formRef = useTemplateRef('formRef')
 
 const showModal = ref(false)
