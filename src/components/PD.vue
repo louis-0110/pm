@@ -8,22 +8,25 @@
         <n-button @click="addRepository">添加仓库</n-button>
 
         <section class="repository-list-wrap">
-            <div class="repository-item" v-for="item in repositoryList">
+            <div :class="['repository-item', {
+                git: item.vcs === 'git',
+                svn: item.vcs === 'svn'
+            }]" v-for="item in repositoryList" :key="item.id">
                 <div class="repository-item-name">
                     <span> {{ item.name }} </span>
                     <n-popconfirm negative-text="取消" positive-text="确定" @positive-click="deleteRepository(item)">
                         <span>是否删除该仓库?</span>
                         <template #trigger>
-                            <n-button circle size="small">
-                                <n-icon :size="12" :component="Close" />
+                            <n-button class="more-btn" size="tiny">
+                                <n-icon :size="12" :component="MoreHorizontal20Regular" />
                             </n-button>
+
                         </template>
                     </n-popconfirm>
                 </div>
-                <div>
-                    <span style="color: #f40; width: 20px; display: inline-block" v-html="icon_git"
-                        v-if="item.vcs === 'git'"></span>
-                    <span style="width: 20px; display: inline-block" v-html="icon_svn" v-if="item.vcs === 'svn'"></span>
+                <div class="tool-bar">
+                    <span v-html="icon_vscode" @click="openPjWithVscode(item.path)"></span>
+                    <span v-html="icon_powershell" @click="openPjWithFolder(item.path)"></span>
                 </div>
             </div>
         </section>
@@ -57,12 +60,26 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readDir } from '@tauri-apps/plugin-fs'
 import icon_git from '@/assets/git.svg?raw'
 import icon_svn from '@/assets/svn.svg?raw'
+import icon_vscode from '@/assets/vscode.svg?raw'
+import icon_powershell from '@/assets/powershell.svg?raw'
+
 import { ref, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { Close } from '@vicons/ionicons5'
+import { MoreHorizontal20Regular } from '@vicons/fluent'
 
-console.log(icon_git)
+import { Command } from '@tauri-apps/plugin-shell';
+import { invoke } from '@tauri-apps/api/core';
+
+async function openPjWithVscode(path: string) {
+    let result = await Command.create('exec-sh', ['-Command', 'code', path]).execute();
+    console.log(result);
+}
+
+async function openPjWithFolder(path: string) {
+    await invoke('open_folder', { path });
+}
+
 const route = useRoute()
 const projectInfo = ref<any>()
 
@@ -167,6 +184,23 @@ const deleteRepository = async (item: any) => {
     transition: all 0.3s;
 }
 
+.repository-item .more-btn {
+    opacity: 0;
+    transition: all 0.3s;
+}
+
+.repository-item:hover .more-btn {
+    opacity: 1;
+}
+
+.repository-item.git {
+    background: url('@/assets/git.svg') no-repeat 80% center / 50px auto;
+}
+
+.repository-item.svn {
+    background: url('@/assets/svn.svg') no-repeat 80% center / 50px auto;
+}
+
 .repository-item:hover {
     box-shadow: 0 2px 12px 0 rgb(0 0 0 / 10%);
 }
@@ -189,5 +223,26 @@ const deleteRepository = async (item: any) => {
 
 .repository-item img {
     width: 22px;
+}
+
+.tool-bar {
+    display: flex;
+    gap: 10px
+}
+
+.tool-bar span {
+    width: 20px;
+    height: 20px;
+    padding: 4px;
+    cursor: pointer;
+    border-radius: 2px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all .2s;
+}
+
+.tool-bar span:hover {
+    background-color: rgb(234, 242, 249);
 }
 </style>

@@ -23,6 +23,7 @@ declare module 'vue' {
     NMessageProvider: typeof import('naive-ui')['NMessageProvider']
     NModal: typeof import('naive-ui')['NModal']
     NPopconfirm: typeof import('naive-ui')['NPopconfirm']
+    NPopselect: typeof import('naive-ui')['NPopselect']
     NScrollbar: typeof import('naive-ui')['NScrollbar']
     NSplit: typeof import('naive-ui')['NSplit']
     NTextarea: typeof import('naive-ui')['NTextarea']

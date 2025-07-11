@@ -6,13 +6,13 @@
       </template>
 </n-input> -->
 
-    <n-button circle style="margin-left: auto" @click="test">
+    <!-- <n-button circle style="margin-left: auto" @click="openPjWithFolder">
       <n-icon :size="18" :component="Add16Filled" />
-    </n-button>
+    </n-button> -->
 
-    <div class="more">
+    <!-- <div class="more">
       <n-icon :size="18" :component="MoreHorizontal20Regular" />
-    </div>
+    </div> -->
     <!-- <n-modal v-model:show="showModal">
       <n-card style="width: 600px" title="模态框" :bordered="false" size="huge" role="dialog" aria-modal="true">
         <template #header-extra>
@@ -29,20 +29,21 @@
 
 <script setup>
 import { Add16Filled, MoreHorizontal20Regular, Search12Regular } from '@vicons/fluent'
+import { open } from '@tauri-apps/plugin-fs'
 import { ref } from 'vue'
 import { Command } from '@tauri-apps/plugin-shell';
+import { invoke } from '@tauri-apps/api/core';
 
 const showModal = ref(false)
 
-async function test() {
-  let result = await Command.create('exec-sh', [
-    '-c',
-    "echo 'Hello World!'",
-  ]).execute();
+async function openPjWithVscode() {
+  let result = await Command.create('exec-sh', ['-Command', 'code', 'D:\\Projects']).execute();
   console.log(result);
 }
 
-
+async function openPjWithFolder() {
+  await invoke('open_folder', { path: 'D:\\Projects'});
+}
 </script>
 
 <style scoped>

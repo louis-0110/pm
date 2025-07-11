@@ -7,8 +7,10 @@
                     <n-icon :component="Search20Regular" />
                 </template>
             </n-input>
-            <n-button circle style="margin-left: 10px;" @click="showModal = true">
-                <template #icon> + </template>
+            <n-button style="margin-left: 10px;" @click="showModal = true">
+                <template #icon>
+                    <n-icon :size="18" :component="Add16Filled" />
+                </template>
             </n-button>
         </div>
         <n-scrollbar class="pm-name-wrap">
@@ -43,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { Search20Regular, } from '@vicons/fluent'
+import { Search20Regular, Add16Filled } from '@vicons/fluent'
 import { Close } from '@vicons/ionicons5'
 import db from '@/db/index'
 import { onMounted, ref, useTemplateRef } from 'vue'

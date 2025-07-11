@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { window } from '@tauri-apps/api';
 import Home from './Home.vue'
 import type { GlobalThemeOverrides } from 'naive-ui'
 

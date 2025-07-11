@@ -22,9 +22,13 @@
       "allow": [
         {
           "name": "exec-sh",
-          "cmd": "sh",
+          "cmd": "powershell",
           "args": [
-            "-c"
+            "-Command",
+            "code",
+            {
+              "validator": "[\\s\\S]+"
+            }
           ]
         }
       ]
