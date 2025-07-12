@@ -1,7 +1,6 @@
 <template>
     <div class="pl-box">
         <div class="logo-wrap">
-            <!-- <img src="@/assets/logo.png" alt="" width="66" height="66" style="margin-right: 10px;border-radius: 10px;" /> -->
             <n-input v-model:value="search" placeholder="搜索" @change="searchProject">
                 <template #prefix>
                     <n-icon :component="Search20Regular" />
@@ -22,19 +21,20 @@
     </div>
 
     <n-modal v-model:show="showModal">
-        <n-card style="width: 600px" title="新增项目" :bordered="false" size="huge" role="dialog" aria-modal="true">
+        <n-card style="width: 600px" title="新增项目" :bordered="false" size="small" role="dialog" aria-modal="true">
             <template #header-extra>
                 <n-icon style="cursor: pointer;" :component="Close" @click="showModal = false" />
             </template>
-            <n-form ref="formRef" :model="model" label-placement="left" @submit.prevent="onCreateNewProject">
-                <n-form-item label="项目名称" path="projectName">
+            <n-form ref="formRef" :model="model" :rules="rules" label-placement="left" label-width="90px"
+                @submit.prevent="onCreateNewProject">
+                <n-form-item label="项目名称" required path="projectName">
                     <n-input v-model:value="model.projectName" placeholder="" />
                 </n-form-item>
-                <n-form-item label="描述" path="projectName">
+                <n-form-item label="描述" path="description">
                     <n-input type="textarea" v-model:value="model.description" placeholder="" />
                 </n-form-item>
                 <n-form-item>
-                    <n-button attr-type="submit">创建</n-button>
+                    <n-button style="margin-left: auto;" type="info" attr-type="submit">创建</n-button>
                 </n-form-item>
             </n-form>
             <template #footer>
@@ -51,8 +51,9 @@ import dbFn from '@/db'
 import { onMounted, ref, useTemplateRef } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useRouter } from 'vue-router'
+import type { FormInst } from 'naive-ui'
 const db = await dbFn
-const formRef = useTemplateRef('formRef')
+const formRef = useTemplateRef<FormInst | null>('formRef')
 
 const showModal = ref(false)
 type ProjectList = { id: number; name: string; updated_at: string; created_at: string; description: string }[]
@@ -76,20 +77,30 @@ const model = ref({
     description: '',
 })
 
-const message = useMessage()
-const onCreateNewProject = async () => {
-    console.log(model.value.projectName)
-
-    const res = await db.execute('INSERT OR IGNORE INTO projects (name, description) VALUES ($1, $2) ', [model.value.projectName, model.value.description])
-    console.log(res)
-    if (res.rowsAffected < 1) {
-        return message.error('创建失败,名称已存在')
+const rules = {
+    projectName: {
+        required: true,
+        message: '请输入名称',
+        trigger: 'change',
     }
-    message.success('创建成功')
-    model.value.description = ''
-    model.value.projectName = ''
-    showModal.value = false
-    getProjectList()
+}
+const message = useMessage()
+const onCreateNewProject = () => {
+    formRef.value?.validate(async (error) => {
+        console.log(error)
+        if (error) return;
+
+        const res = await db.execute('INSERT OR IGNORE INTO projects (name, description) VALUES ($1, $2) ', [model.value.projectName, model.value.description])
+        console.log(res)
+        if (res.rowsAffected < 1) {
+            return message.error('创建失败')
+        }
+        message.success('创建成功')
+        model.value.description = ''
+        model.value.projectName = ''
+        showModal.value = false
+        getProjectList()
+    })
 }
 
 const router = useRouter()
@@ -104,7 +115,6 @@ const search = ref('')
 const searchProject = () => {
     console.log(search.value)
     db.select<ProjectList>('SELECT * FROM projects where name like $1', ['%' + search.value + '%']).then((res) => {
-        console.log(res)
         pList.value = res
     })
 }

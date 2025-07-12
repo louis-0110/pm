@@ -1,29 +1,5 @@
 <template>
   <div class="tool-bar">
-    <!-- <n-input style="width: 400px;" placeholder="搜索">
-      <template #prefix>
-        <n-icon :component="Search12Regular" />
-      </template>
-</n-input> -->
-
-    <!-- <n-button circle style="margin-left: auto" @click="openPjWithFolder">
-      <n-icon :size="18" :component="Add16Filled" />
-    </n-button> -->
-
-    <!-- <div class="more">
-      <n-icon :size="18" :component="MoreHorizontal20Regular" />
-    </div> -->
-    <!-- <n-modal v-model:show="showModal">
-      <n-card style="width: 600px" title="模态框" :bordered="false" size="huge" role="dialog" aria-modal="true">
-        <template #header-extra>
-          噢！
-        </template>
-        内容
-        <template #footer>
-          尾部
-        </template>
-      </n-card>
-    </n-modal> -->
   </div>
 </template>
 
@@ -42,13 +18,13 @@ async function openPjWithVscode() {
 }
 
 async function openPjWithFolder() {
-  await invoke('open_folder', { path: 'D:\\Projects'});
+  await invoke('open_folder', { path: 'D:\\Projects' });
 }
 </script>
 
 <style scoped>
 .tool-bar {
-  height: 50px;
+  /* height: 50px; */
   display: flex;
   justify-content: space-between;
   align-items: center;
