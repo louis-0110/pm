@@ -11,7 +11,9 @@ const theme: GlobalThemeOverrides = {
   <n-config-provider :theme-overrides="theme">
     <n-global-style />
     <n-message-provider>
-      <Home />
+      <Suspense>
+        <Home />
+      </Suspense>
     </n-message-provider>
   </n-config-provider>
 </template>

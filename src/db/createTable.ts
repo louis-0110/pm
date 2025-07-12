@@ -1,8 +1,9 @@
 import { message } from '@tauri-apps/plugin-dialog'
-import db from './index'
+import dbFn from './index'
 
-export default () => {
+export default async () => {
     try {
+        const db = await dbFn
         db.execute(
             `CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, description TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')))`
         )
