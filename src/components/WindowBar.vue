@@ -1,14 +1,16 @@
 <template>
   <div data-tauri-drag-region class="titlebar">
-    <div class="titlebar-button" id="titlebar-minimize" @click="appWindow.minimize">
-      <n-icon :size="18" :component="RemoveOutline" />
-    </div>
-    <div class="titlebar-button" id="titlebar-maximize" @click="appWindow.toggleMaximize">
-      <n-icon :size="18" :component="Maximize16Regular" />
-    </div>
-    <div class="titlebar-button" id="titlebar-close" @click="appWindow.close">
-      <n-icon :size="18" :component="Close" />
-    </div>
+    <template v-if="isCompatibility">
+      <div class="titlebar-button" id="titlebar-minimize" @click="appWindow.minimize">
+        <n-icon :size="18" :component="RemoveOutline" />
+      </div>
+      <div class="titlebar-button" id="titlebar-maximize" @click="appWindow.toggleMaximize">
+        <n-icon :size="18" :component="Maximize16Regular" />
+      </div>
+      <div class="titlebar-button" id="titlebar-close" @click="appWindow.close">
+        <n-icon :size="18" :component="Close" />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -16,6 +18,11 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Close, RemoveOutline } from '@vicons/ionicons5'
 import { Maximize16Regular } from '@vicons/fluent'
+import { type } from '@tauri-apps/plugin-os'
+import { computed } from 'vue'
+
+const isCompatibility = computed(() => type() === 'windows' || type() === 'linux')
+
 const appWindow = getCurrentWindow();
 </script>
 
