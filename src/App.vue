@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import Home from './Home.vue'
 import type { GlobalThemeOverrides } from 'naive-ui'
+import { enable } from '@tauri-apps/plugin-autostart';
+
+enable().catch(console.error);
 
 const theme: GlobalThemeOverrides = {
   common: { fontWeightStrong: '600', fontFamily: 'v-mono' },
 }
+
 </script>
 
 <template>

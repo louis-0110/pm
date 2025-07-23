@@ -7,7 +7,16 @@ async fn open_folder(path: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri_plugin_autostart::MacosLauncher;
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec!["--flag1", "--flag2"]),
+        ))
+        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
+            // Write your code here...
+        }))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
