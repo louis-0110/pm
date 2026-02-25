@@ -37,6 +37,18 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "PM",
+    "category": "DeveloperTool",
+    "shortDescription": "A cross-platform Git/SVN project manager",
+    "longDescription": "PM is a desktop application for managing Git and SVN repositories across multiple projects.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
   }
 }
