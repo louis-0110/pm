@@ -148,16 +148,22 @@ fn create_auth_callbacks() -> RemoteCallbacks<'static> {
     callbacks.credentials(|_url, username_from_url, _allowed_types| {
         let username = username_from_url.unwrap_or("git");
 
-        // 首先尝试 SSH 密钥（从 SSH agent）
-        Cred::ssh_key_from_agent(username)
-            .or_else(|_| {
-                // 如果 SSH agent 失败，尝试使用默认凭据
-                Cred::default()
-            })
-            .or_else(|_| {
-                // 最后尝试使用用户名密码认证（可能需要交互）
-                Err(git2::Error::from_str("需要身份验证，请配置 SSH 密钥或凭据助手"))
-            })
+        // 1. 首先尝试 SSH 密钥（从 SSH agent）
+        if let Ok(cred) = Cred::ssh_key_from_agent(username) {
+            return Ok(cred);
+        }
+
+        // 2. 尝试使用默认凭据助手（系统 Git Credential Manager）
+        if let Ok(cred) = Cred::default() {
+            return Ok(cred);
+        }
+
+        // 3. 给出友好的错误提示
+        Err(git2::Error::from_str(
+            "认证失败。请尝试以下方法之一：\n\
+            1. 在终端中执行一次: git push（这会缓存您的凭据）\n\
+            2. 或者使用 SSH URL: git remote set-url origin git@github.com:user/repo.git"
+        ))
     });
 
     callbacks
@@ -165,6 +171,29 @@ fn create_auth_callbacks() -> RemoteCallbacks<'static> {
 
 #[tauri::command]
 async fn git_pull(path: String) -> Result<String, String> {
+    // 首先尝试使用系统 Git 命令（会使用已保存的凭据）
+    let output = Command::new("git")
+        .args(["-C", &path, "pull"])
+        .output()
+        .map_err(|e| format!("执行 Git 命令失败: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let message = if stdout.trim().is_empty() {
+            "拉取成功（已是最新）".to_string()
+        } else {
+            stdout.trim().to_string()
+        };
+        Ok(message)
+    } else {
+        let _stderr = String::from_utf8_lossy(&output.stderr);
+        // 如果系统 Git 失败，尝试使用 git2 库
+        git_pull_libgit2(path).await
+    }
+}
+
+/// 使用 git2 库的 pull 实现（备用方案）
+async fn git_pull_libgit2(path: String) -> Result<String, String> {
     let repo = Repository::open(&path).map_err(|e| format!("无法打开仓库: {}", e))?;
 
     // 获取远程名称（通常是 "origin"）
@@ -186,7 +215,7 @@ async fn git_pull(path: String) -> Result<String, String> {
     remote.fetch(&[branch_name], Some(&mut fetch_options), None)
         .map_err(|e| {
             if e.to_string().contains("401") || e.to_string().contains("auth") {
-                format!("认证失败：请检查您的 Git 凭据配置\n\n可能的原因：\n1. 未配置 Git 凭据\n2. 用户名或密码错误\n3. Token 已过期\n\n解决方案：\n- 使用 SSH 而不是 HTTPS\n- 配置 Git 凭据助手: git config --global credential.helper store\n- 使用个人访问令牌（GitHub/GitLab 等）")
+                format!("认证失败：请检查您的 Git 凭据配置\n\n可能的原因：\n1. 未配置 Git 凭据\n2. 用户名或密码错误\n3. Token 已过期\n\n解决方案：\n- 在终端中执行一次: git pull（这会缓存您的凭据）\n- 或者使用 SSH 而不是 HTTPS\n- 或者配置 Git 凭据助手: git config --global credential.helper manager")
             } else {
                 format!("拉取失败: {}", e)
             }
@@ -219,6 +248,29 @@ async fn git_pull(path: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn git_push(path: String) -> Result<String, String> {
+    // 首先尝试使用系统 Git 命令（会使用已保存的凭据）
+    let output = Command::new("git")
+        .args(["-C", &path, "push"])
+        .output()
+        .map_err(|e| format!("执行 Git 命令失败: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let message = if stdout.trim().is_empty() {
+            "推送成功".to_string()
+        } else {
+            stdout.trim().to_string()
+        };
+        Ok(message)
+    } else {
+        let _stderr = String::from_utf8_lossy(&output.stderr);
+        // 如果系统 Git 失败，尝试使用 git2 库
+        git_push_libgit2(path).await
+    }
+}
+
+/// 使用 git2 库的 push 实现（备用方案）
+async fn git_push_libgit2(path: String) -> Result<String, String> {
     let repo = Repository::open(&path).map_err(|e| format!("无法打开仓库: {}", e))?;
 
     // 获取当前分支
@@ -246,7 +298,7 @@ async fn git_push(path: String) -> Result<String, String> {
     remote.push(&[&refspec], Some(&mut push_options))
         .map_err(|e| {
             if e.to_string().contains("401") || e.to_string().contains("auth") {
-                format!("认证失败：请检查您的 Git 凭据配置\n\n可能的原因：\n1. 未配置 Git 凭据\n2. 用户名或密码错误\n3. Token 已过期\n4. 没有推送权限\n\n解决方案：\n- 使用 SSH 而不是 HTTPS\n- 配置 Git 凭据助手: git config --global credential.helper store\n- 使用个人访问令牌（GitHub/GitLab 等）")
+                format!("认证失败：请检查您的 Git 凭据配置\n\n可能的原因：\n1. 未配置 Git 凭据\n2. 用户名或密码错误\n3. Token 已过期\n4. 没有推送权限\n\n解决方案：\n- 在终端中执行一次: git push（这会缓存您的凭据）\n- 或者使用 SSH 而不是 HTTPS\n- 或者配置 Git 凭据助手: git config --global credential.helper manager")
             } else {
                 format!("推送失败: {}", e)
             }

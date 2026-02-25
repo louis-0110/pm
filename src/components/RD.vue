@@ -327,12 +327,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import dbFn from '@/db'
 import { gitApi, svnApi, systemApi } from '@/api'
 import { formatSvnDate, withOperationHistory } from '@/utils'
+import { eventBus, Events } from '@/utils/eventBus'
 import type { Repository, GitStatus, SvnStatus } from '@/types'
 
 const db = await dbFn
@@ -674,7 +675,49 @@ function dirtyFilesCount() {
 
 onMounted(() => {
     loadRepositoryInfo()
+
+    // 监听项目删除事件
+    eventBus.on(Events.PROJECT_DELETED, handleProjectDeleted)
+    eventBus.on(Events.REPOSITORY_DELETED, handleRepositoryDeleted)
 })
+
+onUnmounted(() => {
+    // 清理事件监听
+    eventBus.off(Events.PROJECT_DELETED, handleProjectDeleted)
+    eventBus.off(Events.REPOSITORY_DELETED, handleRepositoryDeleted)
+})
+
+// 处理项目删除事件
+function handleProjectDeleted(deletedProject: any) {
+    if (!deletedProject || !repositoryInfo.value) return
+
+    // 如果当前查看的仓库属于被删除的项目，返回首页
+    if (repositoryInfo.value.project_id === deletedProject.id) {
+        toast.add({
+            severity: 'info',
+            summary: '项目已删除',
+            detail: '当前项目已被删除，返回首页',
+            life: 3000
+        })
+        router.push('/')
+    }
+}
+
+// 处理仓库删除事件
+function handleRepositoryDeleted(deletedRepository: any) {
+    if (!deletedRepository || !repositoryInfo.value) return
+
+    // 如果当前查看的仓库被删除，返回项目详情页
+    if (repositoryInfo.value.id === deletedRepository.id) {
+        toast.add({
+            severity: 'info',
+            summary: '仓库已删除',
+            detail: '当前仓库已被删除，返回项目详情',
+            life: 3000
+        })
+        router.push(`/project/${repositoryInfo.value.project_id}`)
+    }
+}
 </script>
 
 <style scoped>

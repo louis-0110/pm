@@ -360,7 +360,7 @@
 import dbFn from '@/db'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readDir } from '@tauri-apps/plugin-fs'
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { Command } from '@tauri-apps/plugin-shell'
@@ -441,6 +441,31 @@ watch(
     },
     { immediate: true },
 )
+
+// 监听项目删除事件
+onMounted(() => {
+    eventBus.on(Events.PROJECT_DELETED, handleProjectDeleted)
+})
+
+onUnmounted(() => {
+    eventBus.off(Events.PROJECT_DELETED, handleProjectDeleted)
+})
+
+// 处理项目删除事件
+function handleProjectDeleted(deletedProject: any) {
+    if (!deletedProject || !projectInfo.value) return
+
+    // 如果当前查看的项目被删除，返回首页
+    if (projectInfo.value.id === deletedProject.id) {
+        toast.add({
+            severity: 'info',
+            summary: '项目已删除',
+            detail: '当前项目已被删除，返回首页',
+            life: 3000
+        })
+        router.push('/')
+    }
+}
 
 async function onCreateNewRepository() {
     formSubmitted.value = true
