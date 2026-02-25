@@ -15,7 +15,8 @@
         "title": "PM",
         "minWidth": 1000,
         "minHeight": 700,
-        "decorations": false
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

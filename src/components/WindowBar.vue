@@ -1,14 +1,8 @@
 <template>
     <div data-tauri-drag-region class="titlebar">
-        <div class="titlebar-left">
-            <Button
-                icon="pi pi-cog"
-                text
-                severity="secondary"
-                @click="openSettings"
-                class="settings-button"
-                v-tooltip.right="'设置'"
-            />
+        <div :class="isCompatibility ? 'titlebar-left' : 'titlebar-right'">
+            <Button icon="pi pi-cog" text severity="secondary" @click="openSettings" class="settings-button"
+                v-tooltip.right="'设置'" />
         </div>
         <div v-if="isCompatibility" class="titlebar-right">
             <div class="titlebar-button" @click="appWindow.minimize">
@@ -42,7 +36,7 @@ function openSettings() {
 
 <style scoped>
 .titlebar {
-    flex:none;
+    flex: none;
     height: 32px;
     background: #ffffff;
     user-select: none;
@@ -60,6 +54,7 @@ function openSettings() {
 }
 
 .titlebar-right {
+    margin-left: auto;
     height: 100%;
     display: flex;
     align-items: center;
