@@ -37,7 +37,9 @@
       "Bash(pnpm run type-check)",
       "Bash(pnpm exec vue-tsc --noEmit)",
       "Bash(del /d/Projects/pm/nul)",
-      "Bash(pnpm tauri build)"
+      "Bash(pnpm tauri build)",
+      "Bash(pnpm tauri build --no-bundle)",
+      "Bash(pnpm build)"
     ]
   }
 }

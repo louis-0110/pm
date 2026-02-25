@@ -1,6 +1,15 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { AppConfig } from '@/types'
 
+export interface SystemInfo {
+    os: 'windows' | 'macos' | 'linux' | string
+    arch: string
+    homeDir: string
+    configDir: string
+    vscodeDefaultPath: string
+    sshDefaultPath: string
+}
+
 export const configApi = {
     /**
      * 获取配置
@@ -21,5 +30,12 @@ export const configApi = {
      */
     async getHomeDir(): Promise<string> {
         return invoke<string>('get_home_dir')
+    },
+
+    /**
+     * 获取系统信息
+     */
+    async getSystemInfo(): Promise<SystemInfo> {
+        return invoke<SystemInfo>('get_system_info')
     },
 }

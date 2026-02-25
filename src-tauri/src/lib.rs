@@ -614,6 +614,43 @@ async fn get_home_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn get_system_info() -> Result<serde_json::Value, String> {
+    let os_type = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    let home_dir = dirs::home_dir()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .unwrap_or_default();
+
+    let config_dir = dirs::config_dir()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .unwrap_or_default();
+
+    // 根据不同系统设置默认 VSCode 路径
+    let vscode_default_path = match os_type {
+        "macos" => "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+        "windows" => "C:\\Program Files\\Microsoft VS Code\\Code.exe",
+        "linux" => "/usr/bin/code",
+        _ => "code",
+    };
+
+    // 根据不同系统设置默认 SSH 路径
+    let ssh_default_path = match os_type {
+        "windows" => format!("{}\\.ssh\\id_rsa", home_dir),
+        _ => format!("{}/.ssh/id_rsa", home_dir),
+    };
+
+    Ok(serde_json::json!({
+        "os": os_type,
+        "arch": arch,
+        "homeDir": home_dir,
+        "configDir": config_dir,
+        "vscodeDefaultPath": vscode_default_path,
+        "sshDefaultPath": ssh_default_path,
+    }))
+}
+
+#[tauri::command]
 async fn git_clone(url: String, target_path: String) -> Result<String, String> {
     // 验证 URL 不为空
     if url.trim().is_empty() {
@@ -1043,6 +1080,7 @@ pub fn run() {
             get_config,
             save_config,
             get_home_dir,
+            get_system_info,
             get_svn_status,
             svn_update,
             svn_commit,

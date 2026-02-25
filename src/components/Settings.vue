@@ -25,6 +25,49 @@
             />
         </div>
 
+        <!-- 系统信息 -->
+        <div class="settings-section">
+            <div class="section-header">
+                <div class="section-icon system">
+                    <i :class="getOsIcon()"></i>
+                </div>
+                <div class="section-info">
+                    <h2>系统信息</h2>
+                    <p>当前运行环境</p>
+                </div>
+            </div>
+
+            <div class="system-info-cards">
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i :class="getOsIcon()"></i>
+                    </div>
+                    <div class="info-details">
+                        <div class="info-label">操作系统</div>
+                        <div class="info-value">{{ getOsName() }}</div>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="pi pi-desktop"></i>
+                    </div>
+                    <div class="info-details">
+                        <div class="info-label">架构</div>
+                        <div class="info-value">{{ systemInfo?.arch || '-' }}</div>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="pi pi-folder"></i>
+                    </div>
+                    <div class="info-details">
+                        <div class="info-label">用户目录</div>
+                        <div class="info-value path">{{ systemInfo?.homeDir || '-' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Git 设置 -->
         <div class="settings-section">
             <div class="section-header">
@@ -69,7 +112,7 @@
                             </div>
                             <InputText
                                 v-model="config.git.ssh_key_path"
-                                placeholder="~/.ssh/id_rsa"
+                                :placeholder="systemInfo?.sshDefaultPath || '~/.ssh/id_rsa'"
                                 class="setting-input"
                             />
                         </div>
@@ -121,20 +164,25 @@
             </div>
 
             <div class="settings-grid">
-                <Card class="setting-card">
+                <Card class="setting-card full-width">
                     <template #content>
                         <div class="setting-item">
                             <div class="setting-label">
                                 <i class="pi pi-code"></i>
                                 <div>
                                     <div class="label-text">VSCode 路径</div>
-                                    <div class="label-desc">可选，留空使用系统默认</div>
+                                    <div class="label-desc">
+                                        可选，留空使用系统默认
+                                        <span v-if="systemInfo" class="default-hint">
+                                            (默认: {{ systemInfo.vscodeDefaultPath }})
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                             <div class="path-input-group">
                                 <InputText
                                     v-model="config.editor.vscode_path"
-                                    placeholder="C:\\Program Files\\Microsoft VS Code\\Code.exe"
+                                    :placeholder="systemInfo?.vscodeDefaultPath || 'VSCode 路径'"
                                     class="setting-input"
                                 />
                                 <Button
@@ -192,7 +240,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { open } from '@tauri-apps/plugin-dialog'
-import { configApi } from '@/api'
+import { configApi, type SystemInfo } from '@/api/config'
 import type { GitConfig, EditorConfig } from '@/types'
 
 const router = useRouter()
@@ -219,19 +267,54 @@ const config = ref<SettingsConfig>({
 
 const saving = ref(false)
 const configPath = ref('')
+const systemInfo = ref<SystemInfo | null>(null)
+
+// 获取操作系统图标
+function getOsIcon(): string {
+    const os = systemInfo.value?.os
+    switch (os) {
+        case 'macos':
+            return 'pi pi-apple'
+        case 'windows':
+            return 'pi pi-microsoft'
+        case 'linux':
+            return 'pi pi-box'
+        default:
+            return 'pi pi-desktop'
+    }
+}
+
+// 获取操作系统名称
+function getOsName(): string {
+    const os = systemInfo.value?.os
+    switch (os) {
+        case 'macos':
+            return 'macOS'
+        case 'windows':
+            return 'Windows'
+        case 'linux':
+            return 'Linux'
+        default:
+            return os || '未知'
+    }
+}
 
 // 加载配置
 async function loadConfig() {
     try {
-        const loadedConfig = await configApi.get()
+        const [loadedConfig, sysInfo] = await Promise.all([
+            configApi.get(),
+            configApi.getSystemInfo()
+        ])
+
         config.value = {
             git: loadedConfig.git,
             editor: loadedConfig.editor
         }
+        systemInfo.value = sysInfo
 
         // 获取配置文件路径
-        const homeDir = await configApi.getHomeDir()
-        configPath.value = `${homeDir}/.pm/config.json`
+        configPath.value = `${sysInfo.homeDir}/.pm/config.json`
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         console.error('配置加载失败:', errorMessage)
@@ -281,12 +364,18 @@ async function saveSettings() {
 // 选择 VSCode 路径
 async function selectVscodePath() {
     try {
+        const os = systemInfo.value?.os
+
+        // 根据不同系统设置不同的文件过滤器
+        const filters = os === 'windows'
+            ? [{ name: 'Executable', extensions: ['exe'] }]
+            : os === 'macos'
+                ? [{ name: 'Application', extensions: ['app'] }]
+                : [{ name: 'Executable', extensions: ['*'] }]
+
         const result = await open({
             multiple: false,
-            filters: [{
-                name: 'Executable',
-                extensions: ['exe']
-            }]
+            filters
         })
 
         if (result) {
@@ -388,6 +477,11 @@ onMounted(() => {
     color: #d97706;
 }
 
+.section-icon.system {
+    background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+    color: #4f46e5;
+}
+
 .section-info h2 {
     margin: 0 0 0.25rem 0;
     font-size: 1.25rem;
@@ -399,6 +493,69 @@ onMounted(() => {
     margin: 0;
     font-size: 0.875rem;
     color: #64748b;
+}
+
+/* ==================== 系统信息卡片 ==================== */
+.system-info-cards {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.info-card {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 1rem 1.25rem;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #f1f5f9;
+    min-width: 200px;
+    flex: 1;
+    transition: all 0.2s ease;
+}
+
+.info-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border-color: #e2e8f0;
+}
+
+.info-card .info-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    border-radius: 10px;
+    color: #475569;
+    font-size: 1.125rem;
+    flex-shrink: 0;
+}
+
+.info-card .info-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.info-card .info-label {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.info-card .info-value {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.info-card .info-value.path {
+    font-size: 0.8125rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+    word-break: break-all;
 }
 
 /* ==================== 设置网格 ==================== */
@@ -449,6 +606,15 @@ onMounted(() => {
 .label-desc {
     font-size: 0.75rem;
     color: #64748b;
+}
+
+.label-desc .default-hint {
+    color: #94a3b8;
+    margin-left: 0.25rem;
+}
+
+.setting-card.full-width {
+    grid-column: 1 / -1;
 }
 
 .setting-input {
@@ -534,6 +700,14 @@ onMounted(() => {
 
     .path-input-group {
         max-width: 100%;
+    }
+
+    .system-info-cards {
+        flex-direction: column;
+    }
+
+    .info-card {
+        min-width: 100%;
     }
 }
 

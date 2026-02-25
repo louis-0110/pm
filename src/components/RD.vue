@@ -346,7 +346,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import dbFn from '@/db'
 import { gitApi, svnApi, systemApi } from '@/api'
-import { formatSvnDate, withOperationHistory } from '@/utils'
+import { formatSvnDate } from '@/utils'
 import { eventBus, Events } from '@/utils/eventBus'
 import type { Repository, GitStatus, SvnStatus } from '@/types'
 
@@ -502,16 +502,7 @@ async function handlePull() {
     const repo = repositoryInfo.value
 
     try {
-        const result = await withOperationHistory(
-            () => gitApi.pull(repo.path),
-            {
-                type: 'git_pull',
-                repositoryName: repo.name,
-                repositoryPath: repo.path,
-                successMessage: '拉取成功',
-                errorPrefix: '拉取失败'
-            }
-        )
+        const result = await gitApi.pull(repo.path)
         toast.add({ severity: 'success', summary: '拉取成功', detail: result, life: 3000 })
         await loadGitStatus()
         // 通知其他组件刷新该仓库的状态
@@ -531,16 +522,7 @@ async function handlePush() {
     const repo = repositoryInfo.value
 
     try {
-        const result = await withOperationHistory(
-            () => gitApi.push(repo.path),
-            {
-                type: 'git_push',
-                repositoryName: repo.name,
-                repositoryPath: repo.path,
-                successMessage: '推送成功',
-                errorPrefix: '推送失败'
-            }
-        )
+        const result = await gitApi.push(repo.path)
         toast.add({ severity: 'success', summary: '推送成功', detail: result, life: 3000 })
         await loadGitStatus()
         // 通知其他组件刷新该仓库的状态
@@ -567,33 +549,12 @@ async function handleCommit() {
 
     try {
         let result: string
-        let operationType: 'git_commit' | 'svn_commit'
 
         if (repo.vcs === 'git') {
-            operationType = 'git_commit'
-            result = await withOperationHistory(
-                () => gitApi.commit(repo.path, commitMessage.value),
-                {
-                    type: operationType,
-                    repositoryName: repo.name,
-                    repositoryPath: repo.path,
-                    successMessage: commitMessage.value,
-                    errorPrefix: '提交失败'
-                }
-            )
+            result = await gitApi.commit(repo.path, commitMessage.value)
             await loadGitStatus()
         } else if (repo.vcs === 'svn') {
-            operationType = 'svn_commit'
-            result = await withOperationHistory(
-                () => svnApi.commit(repo.path, commitMessage.value),
-                {
-                    type: operationType,
-                    repositoryName: repo.name,
-                    repositoryPath: repo.path,
-                    successMessage: commitMessage.value,
-                    errorPrefix: '提交失败'
-                }
-            )
+            result = await svnApi.commit(repo.path, commitMessage.value)
             await loadSvnStatus()
         } else {
             throw new Error('不支持的版本控制系统')
@@ -754,11 +715,12 @@ function handleRepositoryDeleted(deletedRepository: any) {
             detail: '当前仓库已被删除，返回项目详情',
             life: 3000
         })
-        // 清空仓库信息
+        // 先保存项目ID，再清空仓库信息
+        const projectId = repositoryInfo.value.project_id
         repositoryInfo.value = null
         gitStatus.value = null
         svnStatus.value = null
-        router.push(`/project/${repositoryInfo.value.project_id}`)
+        router.push(`/project/${projectId}`)
     }
 }
 </script>

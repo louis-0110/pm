@@ -117,12 +117,25 @@
         v-model:visible="showModal"
         modal
         header="新建项目"
-        :style="{ width: '480px' }"
+        :style="{ width: '500px' }"
         :dismissableMask="true"
         :closeOnEscape="true"
     >
         <form @submit.prevent="onCreateNewProject">
-            <div class="form-content">
+            <div class="dialog-content">
+                <!-- 项目图标选择 -->
+                <div class="project-icon-section">
+                    <div class="project-icon-preview">
+                        <div class="icon-preview">
+                            <i class="pi pi-folder-open"></i>
+                        </div>
+                    </div>
+                    <div class="icon-hint">
+                        <div class="hint-title">创建新项目</div>
+                        <div class="hint-desc">项目可以帮助您组织和管理相关的代码仓库</div>
+                    </div>
+                </div>
+
                 <div class="form-field">
                     <label for="projectName">
                         <i class="pi pi-tag"></i>
@@ -131,7 +144,7 @@
                     <InputText
                         id="projectName"
                         v-model="model.projectName"
-                        placeholder="例如：前端项目"
+                        placeholder="例如：前端项目、后端 API"
                         :class="{ 'p-invalid': !model.projectName && formSubmitted }"
                     />
                     <small
@@ -150,14 +163,14 @@
                     <Textarea
                         id="description"
                         v-model="model.description"
-                        placeholder="简要描述这个项目..."
+                        placeholder="简要描述这个项目的用途和内容..."
                         rows="3"
                         auto-resize
                     />
                 </div>
             </div>
 
-            <div class="form-footer">
+            <div class="dialog-footer">
                 <Button
                     label="取消"
                     severity="secondary"
@@ -166,8 +179,9 @@
                 />
                 <Button
                     type="submit"
-                    label="创建"
+                    label="创建项目"
                     severity="primary"
+                    icon="pi pi-check"
                 />
             </div>
         </form>
@@ -178,16 +192,26 @@
         v-model:visible="showDeleteConfirm"
         modal
         header="确认删除"
-        :style="{ width: '400px' }"
+        :style="{ width: '450px' }"
         :dismissableMask="true"
         :closeOnEscape="true"
     >
         <div class="delete-confirm-content">
-            <i class="pi pi-exclamation-triangle warning-icon"></i>
-            <p>确定要删除项目 <strong>"{{ projectToDelete?.name }}"</strong> 吗？</p>
-            <p class="warning-text">这将同时删除该项目下的所有仓库记录，此操作不可撤销。</p>
+            <div class="warning-icon-wrapper">
+                <div class="warning-icon">
+                    <i class="pi pi-exclamation-triangle"></i>
+                </div>
+            </div>
+            <h3 class="confirm-title">删除项目</h3>
+            <p class="confirm-message">
+                确定要删除项目 <strong class="project-name-highlight">"{{ projectToDelete?.name }}"</strong> 吗？
+            </p>
+            <div class="warning-box">
+                <i class="pi pi-info-circle"></i>
+                <span>这将同时删除该项目下的所有仓库记录，此操作不可撤销。</span>
+            </div>
         </div>
-        <div class="form-footer">
+        <div class="dialog-footer">
             <Button
                 label="取消"
                 severity="secondary"
@@ -195,8 +219,9 @@
                 @click="showDeleteConfirm = false"
             />
             <Button
-                label="删除"
+                label="确认删除"
                 severity="danger"
+                icon="pi pi-trash"
                 @click="confirmDeleteProject"
             />
         </div>
@@ -820,23 +845,70 @@ const searchProject = debounce(async () => {
 /* ==================== 删除确认对话框 ==================== */
 .delete-confirm-content {
     text-align: center;
-    padding: 1rem 0;
+    padding: 0.5rem 0;
 }
 
-.delete-confirm-content .warning-icon {
-    font-size: 3rem;
-    color: #f59e0b;
+.warning-icon-wrapper {
+    display: flex;
+    justify-content: center;
     margin-bottom: 1rem;
 }
 
-.delete-confirm-content p {
-    margin: 0.5rem 0;
-    color: #334155;
+.warning-icon {
+    width: 4rem;
+    height: 4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-radius: 50%;
 }
 
-.delete-confirm-content .warning-text {
-    font-size: 0.875rem;
-    color: #64748b;
+.warning-icon i {
+    font-size: 2rem;
+    color: #d97706;
+}
+
+.confirm-title {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.confirm-message {
+    margin: 0 0 1rem 0;
+    font-size: 0.9375rem;
+    color: #334155;
+    line-height: 1.6;
+}
+
+.project-name-highlight {
+    color: #ef4444;
+}
+
+.warning-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    text-align: left;
+}
+
+.warning-box i {
+    color: #ef4444;
+    font-size: 1rem;
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+}
+
+.warning-box span {
+    font-size: 0.8125rem;
+    color: #991b1b;
+    line-height: 1.5;
 }
 
 /* ==================== 空状态 ==================== */
@@ -965,8 +1037,58 @@ const searchProject = debounce(async () => {
 }
 
 /* ==================== 对话框 ==================== */
-.form-content {
+.dialog-content {
     padding: 0.5rem 0;
+}
+
+/* 项目图标区域 */
+.project-icon-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 12px;
+    margin-bottom: 1.25rem;
+    border: 1px solid #e2e8f0;
+}
+
+.project-icon-preview {
+    flex-shrink: 0;
+}
+
+.icon-preview {
+    width: 3.5rem;
+    height: 3.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.icon-preview i {
+    font-size: 1.75rem;
+    color: white;
+}
+
+.icon-hint {
+    flex: 1;
+    min-width: 0;
+}
+
+.hint-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 0.25rem;
+}
+
+.hint-desc {
+    font-size: 0.8125rem;
+    color: #64748b;
+    line-height: 1.5;
 }
 
 .form-field {
@@ -994,7 +1116,19 @@ const searchProject = debounce(async () => {
     font-size: 0.75rem;
 }
 
-.form-footer {
+.form-field :deep(.p-inputtext),
+.form-field :deep(.p-textarea) {
+    width: 100%;
+    border-radius: 10px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.form-field :deep(.p-inputtext:focus),
+.form-field :deep(.p-textarea:focus) {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.dialog-footer {
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
@@ -1003,7 +1137,7 @@ const searchProject = debounce(async () => {
     margin-top: 0.5rem;
 }
 
-.form-footer :deep(.p-button) {
+.dialog-footer :deep(.p-button) {
     min-width: 5rem;
     border-radius: 10px;
     font-weight: 500;

@@ -16,8 +16,6 @@ declare module 'vue' {
     InputIcon: typeof import('primevue/inputicon')['default']
     InputSwitch: typeof import('primevue/inputswitch')['default']
     InputText: typeof import('primevue/inputtext')['default']
-    OperationHistory: typeof import('./src/components/OperationHistory.vue')['default']
-    OverlayPanel: typeof import('primevue/overlaypanel')['default']
     PD: typeof import('./src/components/PD.vue')['default']
     PL: typeof import('./src/components/PL.vue')['default']
     RD: typeof import('./src/components/RD.vue')['default']
