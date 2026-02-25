@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-// import AutoImport from 'unplugin-auto-import/vite'
-import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
+import {PrimeVueResolver} from '@primevue/auto-import-resolver';
 import Components from 'unplugin-vue-components/vite'
 
 import { fileURLToPath } from 'node:url'
@@ -19,7 +18,7 @@ export default defineConfig(async () => ({
     plugins: [
         vue(),
         Components({
-            resolvers: [NaiveUiResolver()],
+            resolvers: [PrimeVueResolver()],
         }),
     ],
     resolve: {

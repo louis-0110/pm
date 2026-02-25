@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/search.py:*)",
+      "Bash(npm run tauri dev:*)",
+      "Bash(timeout:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(pnpm add:*)",
+      "Bash(dir node_modulesprimeicons /s /b)",
+      "Bash(python3:*)",
+      "Bash(dir \"C:\\\\Users\\\\gaoluo1\\\\.claude\\\\skills\\\\ui-ux-pro-max\\\\scripts\")",
+      "Bash(pnpm run tauri dev:*)",
+      "Bash(cargo check:*)",
+      "WebSearch",
+      "Bash(npx vue-tsc:*)",
+      "Bash(svn:*)",
+      "Bash(svnadmin:*)",
+      "Bash(cargo test:*)",
+      "Bash(npm run tauri build:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm install:*)",
+      "Bash(cargo update:*)",
+      "Bash(pnpm view:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo run:*)",
+      "Bash(cargo:*)",
+      "Bash(test:*)",
+      "Bash(tasklist:*)",
+      "Bash(pnpm tauri dev:*)",
+      "Bash(xargs:*)",
+      "Bash(pnpm vue-tsc:*)",
+      "Bash(pnpm list:*)",
+      "Bash(dir:*)",
+      "Bash(npm run build:*)",
+      "Bash(pnpm run type-check)",
+      "Bash(pnpm exec vue-tsc --noEmit)",
+      "Bash(del /d/Projects/pm/nul)"
+    ]
+  }
+}

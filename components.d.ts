@@ -8,24 +8,29 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    NButton: typeof import('naive-ui')['NButton']
-    NCard: typeof import('naive-ui')['NCard']
-    NConfigProvider: typeof import('naive-ui')['NConfigProvider']
-    NForm: typeof import('naive-ui')['NForm']
-    NFormItem: typeof import('naive-ui')['NFormItem']
-    NGlobalStyle: typeof import('naive-ui')['NGlobalStyle']
-    NIcon: typeof import('naive-ui')['NIcon']
-    NInput: typeof import('naive-ui')['NInput']
-    NMessageProvider: typeof import('naive-ui')['NMessageProvider']
-    NModal: typeof import('naive-ui')['NModal']
-    NPopover: typeof import('naive-ui')['NPopover']
-    NScrollbar: typeof import('naive-ui')['NScrollbar']
-    NSplit: typeof import('naive-ui')['NSplit']
+    Badge: typeof import('primevue/badge')['default']
+    Button: typeof import('primevue/button')['default']
+    Card: typeof import('primevue/card')['default']
+    Dialog: typeof import('primevue/dialog')['default']
+    IconField: typeof import('primevue/iconfield')['default']
+    InputIcon: typeof import('primevue/inputicon')['default']
+    InputSwitch: typeof import('primevue/inputswitch')['default']
+    InputText: typeof import('primevue/inputtext')['default']
     PD: typeof import('./src/components/PD.vue')['default']
     PL: typeof import('./src/components/PL.vue')['default']
+    RD: typeof import('./src/components/RD.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    Settings: typeof import('./src/components/Settings.vue')['default']
+    Splitter: typeof import('primevue/splitter')['default']
+    SplitterPanel: typeof import('primevue/splitterpanel')['default']
+    Tag: typeof import('primevue/tag')['default']
+    Textarea: typeof import('primevue/textarea')['default']
+    Toast: typeof import('primevue/toast')['default']
     ToolBar: typeof import('./src/components/ToolBar.vue')['default']
     WindowBar: typeof import('./src/components/WindowBar.vue')['default']
+  }
+  export interface GlobalDirectives {
+    Tooltip: typeof import('primevue/tooltip')['default']
   }
 }

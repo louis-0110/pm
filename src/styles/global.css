@@ -1,0 +1,178 @@
+/* ==================== 全局样式 ==================== */
+
+/* ==================== 滚动条样式 ==================== */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+/* WebKit 浏览器滚动条 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* 确保 html 和 body 高度正确 */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+#app {
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ==================== 全局动画 ==================== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* ==================== 全局工具类 ==================== */
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+.slide-in-up {
+    animation: slideInUp 0.3s ease-out;
+}
+
+.slide-in-down {
+    animation: slideInDown 0.3s ease-out;
+}
+
+.scale-in {
+    animation: scaleIn 0.2s ease-out;
+}
+
+/* ==================== 文本选择样式 ==================== */
+::selection {
+    background: rgba(59, 130, 246, 0.2);
+    color: #0f172a;
+}
+
+::-moz-selection {
+    background: rgba(59, 130, 246, 0.2);
+    color: #0f172a;
+}
+
+/* ==================== 焦点可见性 ==================== */
+:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+/* ==================== 禁用文本选择 ==================== */
+.no-select {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* ==================== 全局卡片过渡 ==================== */
+.p-card {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==================== 按钮点击反馈 ==================== */
+.p-button:active {
+    transform: scale(0.98);
+}
+
+/* ==================== Toast 通知样式增强 ==================== */
+.p-toast {
+    max-width: 400px;
+}
+
+.p-toast-message {
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* ==================== 加载状态 ==================== */
+.loading {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+/* ==================== 文本省略 ==================== */
+.text-ellipsis {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.text-ellipsis-2 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ==================== 响应式工具类 ==================== */
+@media (max-width: 768px) {
+    ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+
+    .p-toast {
+        max-width: calc(100vw - 2rem);
+    }
+}

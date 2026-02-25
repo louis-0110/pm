@@ -1,70 +1,91 @@
 <template>
-  <main class="main-container">
-    <WindowBar></WindowBar>
-    <n-split direction="horizontal" style="height: 100%" :default-size="0.25" :max="0.5" min="200px"
-      :resize-trigger-size="1">
-      <template #1>
-        <PL></PL>
-      </template>
-      <template #2>
-        <section class="right-container">
-          <ToolBar></ToolBar>
-          <router-view v-slot="{ Component }">
-            <component :is="Component" />
-          </router-view>
-        </section>
-      </template>
-      <template #resize-trigger>
-        <div class="resize-trigger">
-        </div>
-      </template>
-    </n-split>
-  </main>
+    <Toast></Toast>
+    <main class="main-container">
+        <WindowBar></WindowBar>
+        <Splitter
+            class="app-splitter"
+            direction="horizontal"
+            :default-size="25"
+            :max="50"
+            :min-size="20"
+            :resize-trigger-size="3"
+        >
+            <SplitterPanel :size="25" :min-size="20">
+                <PL></PL>
+            </SplitterPanel>
+            <SplitterPanel :size="75">
+                <section class="right-container">
+                    <div class="content-area">
+                        <router-view v-slot="{ Component }">
+                            <component :is="Component" />
+                        </router-view>
+                    </div>
+                </section>
+            </SplitterPanel>
+        </Splitter>
+    </main>
 </template>
 
 <script setup lang="ts">
 import PL from './components/PL.vue'
-import ToolBar from '@/components/ToolBar.vue'
 import WindowBar from './components/WindowBar.vue'
-
-import createTable from '@/db/createTable'
-
-createTable()
 </script>
 
 <style scoped>
 .main-container {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #f8fafc;
 }
 
-:deep(.n-split__resize-trigger-wrapper) {
-  position: relative;
+.app-splitter {
+    flex: 1;
+    overflow: hidden;
 }
 
-:deep(.n-split__resize-trigger-wrapper:hover) {
-  background-color: rgb(51, 96, 242);
+.app-splitter :deep(.p-splitter-panel) {
+    background: transparent;
+    height: 100%;
+    overflow: hidden;
 }
 
-.resize-trigger {
-  background-color: transparent;
-  position: absolute;
-  transform: translateX(-50%);
-  height: 100%;
-  width: 3px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+.app-splitter :deep(.p-splitter-panel-container) {
+    height: 100%;
+}
+
+.app-splitter :deep(.p-splitter-gutter) {
+    background: #e2e8f0;
+    transition: background 0.2s ease;
+}
+
+.app-splitter :deep(.p-splitter-gutter:hover) {
+    background: #3b82f6;
+}
+
+.app-splitter :deep(.p-splitter-gutter-handle) {
+    background: transparent;
 }
 
 .right-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.content-area {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.content-area > * {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 </style>

@@ -1,142 +1,358 @@
 <template>
-    <div class="pd-container">
-        <div class="pj-header">
-            <h1>
-                {{ projectInfo?.name }}
-            </h1>
-
-            <n-button @click="addRepository">添加仓库</n-button>
+    <div class="page-container">
+        <!-- 项目头部 -->
+        <div class="page-header">
+            <div class="page-header-content">
+                <div class="page-title">
+                    <div class="page-icon">
+                        <i class="pi pi-folder-open"></i>
+                    </div>
+                    <div class="title-text">
+                        <h1>{{ projectInfo?.name || '未命名项目' }}</h1>
+                        <p
+                            v-if="projectInfo?.description"
+                            class="page-description"
+                        >
+                            {{ projectInfo.description }}
+                        </p>
+                        <p
+                            v-else
+                            class="page-description empty"
+                        >
+                            暂无描述
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <Button
+                severity="secondary"
+                size="small"
+                label="添加仓库"
+                icon="pi pi-plus"
+                @click="addRepository"
+            />
         </div>
-        <p>{{ projectInfo?.description }}</p>
 
-
-
-        <section class="repository-list-wrap">
-            <div :class="['repository-item', {
-                git: item.vcs === 'git',
-                svn: item.vcs === 'svn'
-            }]" v-for="item in repositoryList" :key="item.id">
-                <div class="repository-item-name">
-                    <span> {{ item.name }} </span>
-
-                    <n-popover trigger="hover" raw :show-arrow="false"
-                        :content-style="{ borderRadius: '10px', overflow: 'hidden' }" placement="bottom">
-                        <template #trigger>
-                            <n-button class="more-btn" size="tiny">
-                                <n-icon :size="12" :component="MoreHorizontal20Regular" />
-                            </n-button>
-                        </template>
-                        <div class="more-btn-wrap">
-                            <div class="more-btn-item" @click="editPjName(item)">
-                                <span>修改名称</span>
+        <!-- 仓库网格 -->
+        <div
+            v-if="repositoryList && repositoryList.length > 0"
+            class="repository-grid"
+        >
+            <Card
+                v-for="item in repositoryList"
+                :key="item.id"
+                class="repository-card"
+                @click="navigateToDetail(item.id)"
+            >
+                <template #content>
+                    <div class="repository-content">
+                        <!-- 仓库头部 -->
+                        <div class="repository-header">
+                            <div
+                                class="repository-icon"
+                                :class="item.vcs"
+                            >
+                                <i
+                                    :class="
+                                        item.vcs === 'git' ? 'pi pi-github' : 'pi pi-code-branch'
+                                    "
+                                />
                             </div>
-                            <div class="more-btn-item" @click="openPjWithVscode(item.path)">
-                                <span>在vscode中打开</span>
-                            </div>
-
-                            <div class="more-btn-item" @click="openPjWithFolder(item.path)">
-                                <span>在文件系统中打开</span>
-                            </div>
-                            <div class="divider"></div>
-                            <div class="more-btn-item delete" @click="deleteRepository(item)">
-                                <span>删除</span>
+                            <div class="repository-info">
+                                <h3 class="repository-name">{{ item.name }}</h3>
+                                <Tag
+                                    :value="item.vcs === 'git' ? 'Git' : 'SVN'"
+                                    :severity="item.vcs === 'git' ? 'info' : 'warning'"
+                                    class="repository-tag"
+                                />
                             </div>
                         </div>
-                    </n-popover>
 
+                        <!-- Git 状态 -->
+                        <div
+                            v-if="item.vcs === 'git' && getGitStatus(item.id)"
+                            class="git-status"
+                        >
+                            <div class="git-status-item">
+                                <i class="pi pi-code-branch"></i>
+                                <span>{{ getGitStatus(item.id)?.branch || 'unknown' }}</span>
+                            </div>
+                            <div
+                                v-if="getGitStatus(item.id)?.is_dirty"
+                                class="git-status-badge dirty"
+                            >
+                                <i class="pi pi-exclamation-circle"></i>
+                                <span
+                                    >{{
+                                        getGitStatus(item.id)?.modified_files?.length || 0
+                                    }}
+                                    个文件已修改</span
+                                >
+                            </div>
+                            <div
+                                v-else
+                                class="git-status-badge clean"
+                            >
+                                <i class="pi pi-check-circle"></i>
+                                <span>干净</span>
+                            </div>
+                        </div>
 
+                        <!-- SVN 状态 -->
+                        <div
+                            v-if="item.vcs === 'svn' && getSvnStatus(item.id)"
+                            class="git-status"
+                        >
+                            <div class="git-status-item">
+                                <i class="pi pi-code-branch"></i>
+                                <span>r{{ getSvnStatus(item.id)?.revision || 'unknown' }}</span>
+                            </div>
+                            <div
+                                v-if="getSvnStatus(item.id)?.is_dirty"
+                                class="git-status-badge dirty"
+                            >
+                                <i class="pi pi-exclamation-circle"></i>
+                                <span
+                                    >{{
+                                        getSvnStatus(item.id)?.modified_files?.length || 0
+                                    }}
+                                    个文件已修改</span
+                                >
+                            </div>
+                            <div
+                                v-else
+                                class="git-status-badge clean"
+                            >
+                                <i class="pi pi-check-circle"></i>
+                                <span>干净</span>
+                            </div>
+                        </div>
+
+                        <!-- 仓库路径 -->
+                        <div class="repository-path">
+                            <i class="pi pi-folder"></i>
+                            <span>{{ item.path }}</span>
+                        </div>
+
+                        <!-- 操作按钮 -->
+                        <div
+                            class="repository-actions"
+                            @click.stop
+                        >
+                            <Button
+                                icon="pi pi-code"
+                                text
+                                v-tooltip.top="'用 VSCode 打开'"
+                                @click="openPjWithVscode(item.path)"
+                            />
+                            <Button
+                                icon="pi pi-folder-open"
+                                text
+                                v-tooltip.top="'打开文件夹'"
+                                @click="openPjWithFolder(item.path)"
+                            />
+                            <Button
+                                icon="pi pi-pencil"
+                                text
+                                severity="secondary"
+                                v-tooltip.top="'编辑名称'"
+                                @click="editPjName(item)"
+                            />
+                            <Button
+                                icon="pi pi-trash"
+                                text
+                                severity="danger"
+                                v-tooltip.top="'删除仓库'"
+                                @click="deleteRepository(item)"
+                            />
+                        </div>
+                    </div>
+                </template>
+            </Card>
+        </div>
+
+        <!-- 空状态 -->
+        <div
+            v-else
+            class="empty-repositories"
+        >
+            <div class="empty-illustration">
+                <div class="empty-icon-bg">
+                    <i class="pi pi-inbox"></i>
                 </div>
-                <!-- <div class="tool-bar">
-                    <span v-html="icon_vscode" @click="openPjWithVscode(item.path)"></span>
-                    <span v-html="icon_powershell" @click="openPjWithFolder(item.path)"></span>
-                </div> -->
             </div>
-        </section>
+            <h3>暂无仓库</h3>
+            <p>添加代码仓库来管理项目文件</p>
+            <Button
+                label="添加第一个仓库"
+                icon="pi pi-plus"
+                severity="primary"
+                outlined
+                @click="addRepository"
+                class="empty-action-button"
+            />
+        </div>
     </div>
 
-    <n-modal v-model:show="isShowRepository" :on-after-leave="onAfterLeave">
-        <n-card style="width: 600px" title="仓库信息" :bordered="false" size="small" role="dialog" aria-modal="true">
-            <n-form ref="formRef" :model="newRepository" label-placement="left" :rules="rules"
-                @submit.prevent="onCreateNewRepository">
-                <n-form-item label="仓库名称" path="name">
-                    <n-input v-model:value="newRepository.name" placeholder="" />
-                </n-form-item>
-                <n-form-item label="文件地址" path="url">
-                    <n-input v-model:value="newRepository.path" readonly placeholder="">
-                        <template #suffix>
-                            <span v-if="newRepository.vcs" style="color: #f40; width: 20px; display: inline-grid;"
-                                v-html="newRepository.vcs === 'svn' ? icon_svn : icon_git"></span>
-                        </template>
-                    </n-input>
-                </n-form-item>
-                <n-form-item>
-                    <n-button style="margin-left: auto;" type="info" attr-type="submit">创建</n-button>
-                </n-form-item>
-            </n-form>
-        </n-card>
-    </n-modal>
+    <!-- 添加仓库对话框 -->
+    <Dialog
+        v-model:visible="isShowRepository"
+        modal
+        header="添加代码仓库"
+        :style="{ width: '500px' }"
+        @after-hide="onAfterLeave"
+        :dismissableMask="true"
+        :closeOnEscape="true"
+    >
+        <form @submit.prevent="onCreateNewRepository">
+            <div class="dialog-content">
+                <div class="form-field">
+                    <label>
+                        <i class="pi pi-tag"></i>
+                        仓库名称
+                    </label>
+                    <InputText
+                        v-model="newRepository.name"
+                        placeholder="例如：前端项目、后端 API"
+                        :class="{ 'p-invalid': !newRepository.name && formSubmitted }"
+                    />
+                    <small
+                        class="p-error"
+                        v-if="!newRepository.name && formSubmitted"
+                        >请输入仓库名称</small
+                    >
+                </div>
 
-    <n-modal v-model:show="isShowRePjName" :on-after-leave="onAfterLeaveRePjName">
-        <n-card style="width: 600px" title="仓库信息" :bordered="false" size="small" role="dialog" aria-modal="true">
-            <n-form ref="formRenameRef" :model="pjInfo" :rules="rePjNameRules" label-placement="left"
-                @submit.prevent="onUpdatePjName">
-                <n-form-item required label="仓库名称" path="name">
-                    <n-input v-model:value="pjInfo.name" placeholder="" />
-                </n-form-item>
-                <n-form-item>
-                    <n-button style="margin-left: auto;" @click="isShowRePjName = false">取消</n-button>
-                    <n-button style="margin-left: 20px;" type="info" attr-type="submit">确定</n-button>
-                </n-form-item>
-            </n-form>
-        </n-card>
-    </n-modal>
+                <div class="form-field">
+                    <label>
+                        <i class="pi pi-folder"></i>
+                        本地路径
+                    </label>
+                    <div class="path-display">
+                        <i class="pi pi-folder"></i>
+                        <span>{{ newRepository.path || '未选择' }}</span>
+                        <Tag
+                            v-if="newRepository.vcs"
+                            :value="newRepository.vcs.toUpperCase()"
+                            :severity="newRepository.vcs === 'git' ? 'success' : 'warning'"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div class="dialog-footer">
+                <Button
+                    label="取消"
+                    severity="secondary"
+                    text
+                    @click="isShowRepository = false"
+                />
+                <Button
+                    type="submit"
+                    label="添加"
+                    severity="primary"
+                />
+            </div>
+        </form>
+    </Dialog>
+
+    <!-- 编辑仓库名称对话框 -->
+    <Dialog
+        v-model:visible="isShowRePjName"
+        modal
+        header="编辑仓库名称"
+        :style="{ width: '450px' }"
+        @after-hide="onAfterLeaveRePjName"
+        :dismissableMask="true"
+        :closeOnEscape="true"
+    >
+        <form @submit.prevent="onUpdatePjName">
+            <div class="dialog-content">
+                <div class="form-field">
+                    <label>
+                        <i class="pi pi-tag"></i>
+                        仓库名称
+                    </label>
+                    <InputText
+                        v-model="pjInfo.name"
+                        placeholder="输入新的仓库名称"
+                        :class="{ 'p-invalid': !pjInfo.name && renameFormSubmitted }"
+                    />
+                    <small
+                        class="p-error"
+                        v-if="!pjInfo.name && renameFormSubmitted"
+                        >请输入仓库名称</small
+                    >
+                </div>
+            </div>
+
+            <div class="dialog-footer">
+                <Button
+                    label="取消"
+                    severity="secondary"
+                    text
+                    @click="isShowRePjName = false"
+                />
+                <Button
+                    type="submit"
+                    label="保存"
+                    severity="primary"
+                />
+            </div>
+        </form>
+    </Dialog>
 </template>
 
 <script setup lang="ts">
 import dbFn from '@/db'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readDir } from '@tauri-apps/plugin-fs'
-import icon_git from '@/assets/git.svg?raw'
-import icon_svn from '@/assets/svn.svg?raw'
-// import icon_vscode from '@/assets/vscode.svg?raw'
-// import icon_powershell from '@/assets/powershell.svg?raw'
-
-import { ref, useTemplateRef, watchEffect } from 'vue'
-import { useRoute } from 'vue-router'
-import { useMessage } from 'naive-ui'
-import { MoreHorizontal20Regular } from '@vicons/fluent'
-import type { FormInst } from 'naive-ui'
-import { Command } from '@tauri-apps/plugin-shell';
-import { invoke } from '@tauri-apps/api/core';
+import { ref, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useToast } from 'primevue/usetoast'
+import { Command } from '@tauri-apps/plugin-shell'
+import { gitApi, svnApi, systemApi } from '@/api'
+import { eventBus, Events } from '@/utils/eventBus'
+import type { Project, Repository, GitStatus, SvnStatus } from '@/types'
 
 const db = await dbFn
+const toast = useToast()
+const route = useRoute()
+const router = useRouter()
+
+// Git 状态存储
+const gitStatuses = ref<Map<string, GitStatus>>(new Map())
+// SVN 状态存储
+const svnStatuses = ref<Map<string, SvnStatus>>(new Map())
+
+const projectInfo = ref<Project | null>(null)
+const repositoryList = ref<Repository[]>([])
+const formSubmitted = ref(false)
+const renameFormSubmitted = ref(false)
 
 async function openPjWithVscode(path: string) {
-    let result = await Command.create('exec-sh', ['-Command', 'code', `'${path}'`]).execute();
-    console.log(result);
+    await Command.create('exec-sh', ['-Command', 'code', `'${path}'`]).execute()
 }
 
 async function openPjWithFolder(path: string) {
-    await invoke('open_folder', { path });
+    await systemApi.openFolder(path)
 }
 
-const route = useRoute()
-const projectInfo = ref<any>()
-
-const message = useMessage()
 const getProjectInfo = async (id: string) => {
-    const res: any = await db.select('SELECT * FROM projects where id = $1', [id])
-    projectInfo.value = res[0]
+    const res = await db.select<Project[]>('SELECT * FROM projects WHERE id = $1', [id])
+    projectInfo.value = res[0] || null
 }
 
-const repositoryList = ref<any>()
-const getRepositories = async (id: string) => {
-    const res = await db.select('SELECT * FROM repositories where project_id = $1', [id])
+const getRepositories = async (id: number | string) => {
+    const res = await db.select<Repository[]>('SELECT * FROM repositories WHERE project_id = $1', [id])
     repositoryList.value = res
 }
 
-const formRef = useTemplateRef<FormInst | null>('formRef')
+// ==================== Dialog 状态 ====================
+const isShowRepository = ref(false)
+const isShowRePjName = ref(false)
 
+// ==================== 表单数据 ====================
 const newRepository = ref({
     name: '',
     path: '',
@@ -144,29 +360,34 @@ const newRepository = ref({
     project_id: route.params.id,
 })
 
-const rules = {
-    name: {
-        required: true,
-        message: '请输入名称',
-        trigger: 'change',
-    },
-    path: {
-        required: true,
-        message: '请输入路径',
-        trigger: 'change',
-    }
-}
-
-watchEffect(() => {
-    if (route.params.id) {
-        getProjectInfo(route.params.id as string)
-        getRepositories(route.params.id as string)
-        newRepository.value.project_id = route.params.id
-    }
+const pjInfo = ref({
+    name: '',
+    id: '',
 })
 
+// ==================== 防止重复打开的标志 ====================
+let isOpeningDialog = false
+
+// 使用 watch 替代 watchEffect，避免连锁触发
+watch(
+    () => route.params.id,
+    (newId) => {
+        if (newId) {
+            getProjectInfo(newId as string)
+            getRepositories(newId as string)
+            newRepository.value.project_id = newId
+        }
+    },
+    { immediate: true },
+)
+
 async function onCreateNewRepository() {
-    await formRef.value?.validate()
+    formSubmitted.value = true
+
+    if (!newRepository.value.name) {
+        return
+    }
+
     const res = await db.execute(
         'INSERT OR IGNORE INTO repositories (name, path, project_id, vcs) VALUES ($1, $2, $3, $4) ',
         [
@@ -174,24 +395,44 @@ async function onCreateNewRepository() {
             newRepository.value.path,
             newRepository.value.project_id,
             newRepository.value.vcs,
-        ]
+        ],
     )
     if (res.rowsAffected < 1) {
-        return message.error('创建失败')
+        toast.add({
+            severity: 'error',
+            summary: '添加失败',
+            detail: '该仓库可能已存在',
+            life: 3000,
+        })
+        return
     }
+    toast.add({
+        severity: 'success',
+        summary: '添加成功',
+        detail: `仓库 "${newRepository.value.name}" 已添加`,
+        life: 3000,
+    })
     isShowRepository.value = false
-    getRepositories(projectInfo.value.id)
+    // 手动重新获取仓库列表，而不是触发 watchEffect
+    if (projectInfo.value) {
+        await getRepositories(projectInfo.value.id)
+        // 通知其他组件数据已更新
+        eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
+    }
 }
 
-const isShowRepository = ref(false)
-// 获取项目路径
 async function addRepository() {
+    // 防止重复打开
+    if (isOpeningDialog) return
+
     const result = await open({
         multiple: false,
         directory: true,
     })
 
     if (result) {
+        isOpeningDialog = true
+
         //版本管理工具
         let vcs = ''
         const entries = await readDir(result)
@@ -205,185 +446,691 @@ async function addRepository() {
             }
         }
 
+        // 先设置数据
         newRepository.value.path = result
         newRepository.value.vcs = vcs
-        isShowRepository.value = true
+        formSubmitted.value = false
+
+        // 使用 nextTick 确保数据更新后再打开 Dialog
+        nextTick(() => {
+            isShowRepository.value = true
+            isOpeningDialog = false
+        })
     }
 }
 
-const deleteRepository = async (item: any) => {
-    const res = await db.execute('DELETE FROM repositories where id = $1', [item.id])
-    console.log(res)
-    getRepositories(projectInfo.value.id)
+const deleteRepository = async (item: Repository) => {
+    await db.execute('DELETE FROM repositories WHERE id = $1', [item.id])
+    await getRepositories(projectInfo.value!.id)
+    // 通知其他组件数据已更新
+    eventBus.emit(Events.REPOSITORY_DELETED, item)
+    toast.add({
+        severity: 'success',
+        summary: '删除成功',
+        detail: `仓库 "${item.name}" 已删除`,
+        life: 3000,
+    })
 }
-
-
-const pjInfo = ref({
-    name: '',
-    id: ''
-})
-
-const rePjNameRules = {
-    name: {
-        required: true,
-        message: '请输入名称',
-        trigger: 'change',
-    }
-}
-
-const formRenameRef = useTemplateRef<FormInst | null>('formRenameRef')
-
-const isShowRePjName = ref(false)
 
 function editPjName(item: any) {
-    isShowRePjName.value = true
+    // 防止重复打开
+    if (isOpeningDialog) return
+
+    isOpeningDialog = true
+
+    // 先设置数据
     pjInfo.value.name = item.name
     pjInfo.value.id = item.id
+    renameFormSubmitted.value = false
+
+    // 使用 nextTick 确保数据更新后再打开 Dialog
+    nextTick(() => {
+        isShowRePjName.value = true
+        isOpeningDialog = false
+    })
 }
 
 async function onUpdatePjName() {
-    await formRenameRef.value?.validate()
-    await db.execute('UPDATE repositories SET name = $1 where id = $2', [pjInfo.value.name, pjInfo.value.id])
+    renameFormSubmitted.value = true
+
+    if (!pjInfo.value.name) {
+        return
+    }
+
+    await db.execute('UPDATE repositories SET name = $1 where id = $2', [
+        pjInfo.value.name,
+        pjInfo.value.id,
+    ])
     isShowRePjName.value = false
     getRepositories(route.params.id as string)
+    toast.add({ severity: 'success', summary: '更新成功', detail: '仓库名称已更新', life: 3000 })
 }
 
-
 function onAfterLeave() {
-    console.log('111')
     newRepository.value.name = ''
     newRepository.value.path = ''
     newRepository.value.vcs = ''
+    formSubmitted.value = false
 }
 
 function onAfterLeaveRePjName() {
     pjInfo.value.name = ''
     pjInfo.value.id = ''
+    renameFormSubmitted.value = false
 }
+
+// 获取 Git 状态
+function getGitStatus(repoId: number | string): GitStatus | undefined {
+    return gitStatuses.value.get(String(repoId))
+}
+
+// 加载仓库的 Git 状态
+async function loadGitStatus(repository: Repository) {
+    if (repository.vcs !== 'git') return
+
+    try {
+        const status = await gitApi.getStatus(repository.path)
+        gitStatuses.value.set(String(repository.id), status)
+    } catch (error) {
+        // 静默失败
+    }
+}
+
+// 加载所有 Git 仓库的状态
+async function loadAllGitStatuses() {
+    if (!repositoryList.value) return
+
+    for (const repo of repositoryList.value) {
+        if (repo.vcs === 'git') {
+            await loadGitStatus(repo)
+        }
+    }
+}
+
+// 获取 SVN 状态
+function getSvnStatus(repoId: number | string): SvnStatus | undefined {
+    return svnStatuses.value.get(String(repoId))
+}
+
+// 加载仓库的 SVN 状态
+async function loadSvnStatus(repository: Repository) {
+    if (repository.vcs !== 'svn') return
+
+    try {
+        const status = await svnApi.getStatus(repository.path)
+        svnStatuses.value.set(String(repository.id), status)
+    } catch (error) {
+        // 静默失败
+    }
+}
+
+// 加载所有 SVN 仓库的状态
+async function loadAllSvnStatuses() {
+    if (!repositoryList.value) return
+
+    for (const repo of repositoryList.value) {
+        if (repo.vcs === 'svn') {
+            await loadSvnStatus(repo)
+        }
+    }
+}
+
+// 导航到仓库详情页
+function navigateToDetail(repoId: number | string) {
+    router.push(`/repository/${repoId}`)
+}
+
+// 监听 repositoryList 变化，自动加载 Git 和 SVN 状态
+// 使用标志位防止重复执行
+let isLoadingStatuses = false
+watch(
+    () => repositoryList.value,
+    (newList) => {
+        // 防止初始化时重复执行
+        if (isLoadingStatuses) return
+
+        // 只在列表真正变化时执行（长度变化或内容变化）
+        if (newList && newList.length > 0) {
+            isLoadingStatuses = true
+            Promise.all([loadAllGitStatuses(), loadAllSvnStatuses()]).finally(() => {
+                isLoadingStatuses = false
+            })
+        }
+    },
+    { immediate: true },
+)
 </script>
 
 <style scoped>
-.pd-container {
-    margin: 10px 10px 10px 0;
-    padding: 10px;
-    box-sizing: border-box;
-    border-radius: 6px;
-    background-color: #f9fcfe;
+/* ==================== 页面容器 ==================== */
+.page-container {
+    padding: 1.5rem;
     height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: #f8fafc;
+    box-sizing: border-box;
 }
 
-.pj-header {
+/* ==================== 页面头部 ==================== */
+.page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    margin-bottom: 1.5rem;
+}
+
+.page-header-content {
+    flex: 1;
+}
+
+.page-title {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.page-icon {
+    width: 3.5rem;
+    height: 3.5rem;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-radius: 12px;
+    color: #2563eb;
+    font-size: 1.5rem;
+    flex-shrink: 0;
 }
 
-.pj-header h1 {
+.title-text h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.3;
+}
+
+.page-description {
     margin: 0;
-    width: 80%;
+    font-size: 0.9375rem;
+    color: #64748b;
+    line-height: 1.6;
 }
 
-.repository-item {
-    width: 200px;
-    height: 80px;
-    border-radius: 8px;
-    border: 1px solid #eaeaea;
-    transition: all 0.3s;
+.page-description.empty {
+    font-style: italic;
+    opacity: 0.6;
 }
 
-.repository-item .more-btn {
+/* ==================== 主要操作按钮 - 现代设计 ==================== */
+.add-repo-button :deep(.p-button) {
+    position: relative;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
+    border: none;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 3px 8px rgba(59, 130, 246, 0.25);
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    overflow: hidden;
+}
+
+.add-repo-button :deep(.p-button::before) {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
     opacity: 0;
-    transition: all 0.3s;
+    transition: opacity 0.3s ease;
 }
 
-.repository-item:hover .more-btn {
+.add-repo-button :deep(.p-button:hover) {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
+    transform: translateY(-1px);
+    box-shadow:
+        0 4px 8px rgba(59, 130, 246, 0.3),
+        0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.add-repo-button :deep(.p-button:hover::before) {
     opacity: 1;
 }
 
-.repository-item.git {
-    background: url('@/assets/git.svg') no-repeat 80% center / 50px auto;
+.add-repo-button :deep(.p-button:active) {
+    transform: translateY(0);
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 2px 5px rgba(59, 130, 246, 0.2);
 }
 
-.repository-item.svn {
-    background: url('@/assets/svn.svg') no-repeat 80% center / 50px auto;
+.add-repo-button :deep(.p-button .p-button-icon) {
+    font-size: 0.9375rem;
+    margin-right: 0.5rem;
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.repository-item:hover {
-    box-shadow: 0 2px 12px 0 rgb(0 0 0 / 10%);
+.add-repo-button :deep(.p-button:hover .p-button-icon) {
+    transform: rotate(90deg);
 }
 
-.repository-list-wrap {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-    padding: 20px 0;
+.add-repo-button :deep(.p-button .p-button-label) {
+    font-weight: 600;
+    position: relative;
+    z-index: 1;
 }
 
-.repository-list-wrap .repository-item {
-    padding: 10px;
+/* ==================== 仓库网格 ==================== */
+.repository-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
 }
 
-.repository-item-name {
-    display: flex;
-    justify-content: space-between;
-}
-
-.repository-item img {
-    width: 22px;
-}
-
-.tool-bar {
-    display: flex;
-    gap: 10px
-}
-
-.tool-bar span {
-    width: 20px;
-    height: 20px;
-    padding: 4px;
+.repository-card {
+    border: 1px solid #f1f5f9;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
-    border-radius: 2px;
+}
+
+.repository-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.repository-card :deep(.p-card-content) {
+    padding: 1.25rem;
+}
+
+.repository-content {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* ==================== 仓库头部 ==================== */
+.repository-header {
+    display: flex;
     align-items: center;
-    transition: all .2s;
+    gap: 0.75rem;
 }
 
-.tool-bar span:hover {
-    background-color: rgb(234, 242, 249);
+.repository-icon {
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-size: 1.5rem;
+    flex-shrink: 0;
 }
 
-
-.more-btn-wrap {
-    padding: 10px;
-    background-color: #fff;
+.repository-icon.git {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #2563eb;
 }
 
-.more-btn-wrap .more-btn-item {
-    padding: 4px 10px;
-    font-size: 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all .2s;
+.repository-icon.svn {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #d97706;
 }
 
-.more-btn-wrap .more-btn-item:hover {
-    background-color: #f9fcfe;
+.repository-info {
+    flex: 1;
+    min-width: 0;
 }
 
-.more-btn-wrap .more-btn-item.delete:hover {
-    background-color: rgb(255, 246, 246);
-    color: #f40;
-}
-
-.more-btn-wrap .divider {
-    height: 1px;
-    background-color: #eaeaea;
-    margin: 3px 0;
-}
-
-:global(.n-popover) {
-    border-radius: 10px;
+.repository-name {
+    margin: 0 0 0.375rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.repository-tag {
+    font-size: 0.6875rem;
+    font-weight: 500;
+}
+
+/* ==================== Git 状态 ==================== */
+.git-status {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    border-radius: 8px;
+}
+
+.git-status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: #334155;
+    font-weight: 500;
+}
+
+.git-status-item i {
+    color: #3b82f6;
+    font-size: 0.875rem;
+}
+
+.git-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.git-status-badge.dirty {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.git-status-badge.dirty i {
+    color: #dc2626;
+    font-size: 0.8125rem;
+}
+
+.git-status-badge.clean {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.git-status-badge.clean i {
+    color: #16a34a;
+    font-size: 0.8125rem;
+}
+
+/* ==================== 仓库路径 ==================== */
+.repository-path {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    color: #64748b;
+}
+
+.repository-path i {
+    color: #3b82f6;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+}
+
+.repository-path span {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* ==================== 操作按钮 ==================== */
+.repository-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 0.875rem;
+    border-top: 1px solid #f1f5f9;
+}
+
+.repository-actions :deep(.p-button) {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border-radius: 8px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.repository-actions :deep(.p-button:hover) {
+    background: #f8fafc;
+    transform: translateY(-1px);
+}
+
+.repository-actions :deep(.p-button:active) {
+    transform: translateY(0);
+}
+
+.repository-actions :deep(.p-button .p-button-icon) {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.repository-actions :deep(.p-button.p-button-danger:hover) {
+    background: #fef2f2;
+}
+
+.repository-actions :deep(.p-button.p-button-secondary:hover) {
+    background: #f8fafc;
+}
+
+/* ==================== Tooltip 样式优化 ==================== */
+.repository-actions :deep(.p-tooltip) {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.repository-actions :deep(.p-tooltip .p-tooltip-text) {
+    background: #1e293b;
+    border-radius: 6px;
+    padding: 0.375rem 0.625rem;
+}
+
+/* ==================== 空状态 ==================== */
+.empty-repositories {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 5rem 2rem;
+    text-align: center;
+}
+
+.empty-illustration {
+    margin-bottom: 1.5rem;
+}
+
+.empty-icon-bg {
+    width: 6rem;
+    height: 6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    border-radius: 50%;
+    margin-bottom: 1.5rem;
+}
+
+.empty-icon-bg i {
+    font-size: 3rem;
+    color: #94a3b8;
+    opacity: 0.5;
+}
+
+.empty-repositories h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.empty-repositories p {
+    margin: 0 0 2rem 0;
+    font-size: 0.9375rem;
+    color: #64748b;
+}
+
+.empty-action-button :deep(.p-button) {
+    position: relative;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
+    border: none;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 3px 8px rgba(59, 130, 246, 0.25);
+    padding: 0.75rem 1.75rem;
+    font-size: 0.875rem;
+    overflow: hidden;
+}
+
+.empty-action-button :deep(.p-button::before) {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.empty-action-button :deep(.p-button:hover) {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
+    transform: translateY(-1px);
+    box-shadow:
+        0 4px 8px rgba(59, 130, 246, 0.3),
+        0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.empty-action-button :deep(.p-button:hover::before) {
+    opacity: 1;
+}
+
+.empty-action-button :deep(.p-button:active) {
+    transform: translateY(0);
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 2px 5px rgba(59, 130, 246, 0.2);
+}
+
+.empty-action-button :deep(.p-button .p-button-icon) {
+    font-size: 0.9375rem;
+    margin-right: 0.5rem;
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.empty-action-button :deep(.p-button:hover .p-button-icon) {
+    transform: rotate(90deg);
+}
+
+.empty-action-button :deep(.p-button .p-button-label) {
+    font-weight: 600;
+    position: relative;
+    z-index: 1;
+}
+
+/* ==================== 对话框 ==================== */
+.dialog-content {
+    padding: 0.5rem 0;
+}
+
+.form-field {
+    margin-bottom: 1.25rem;
+}
+
+.form-field label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: #334155;
+}
+
+.form-field label i {
+    color: #3b82f6;
+    font-size: 0.875rem;
+}
+
+.form-field :deep(.p-inputtext) {
+    width: 100%;
+}
+
+.path-display {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    color: #64748b;
+    font-size: 0.875rem;
+}
+
+.path-display i {
+    color: #3b82f6;
+    font-size: 1rem;
+}
+
+.path-display span {
+    flex: 1;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* ==================== 对话框底部按钮 ==================== */
+.dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f1f5f9;
+    margin-top: 0.5rem;
+}
+
+.dialog-footer :deep(.p-button) {
+    min-width: 5rem;
+    border-radius: 10px;
+    font-weight: 500;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==================== 响应式 ==================== */
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .page-title {
+        flex-direction: row;
+    }
+
+    .repository-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .repository-actions {
+        justify-content: space-between;
+    }
 }
 </style>
