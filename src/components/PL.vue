@@ -2,9 +2,9 @@
     <div class="sidebar">
         <!-- 头部 -->
         <div class="sidebar-header">
-            <div class="brand">
+            <div class="brand" @click="goHome">
                 <div class="brand-icon">
-                    <i class="pi pi-code"></i>
+                    <img src="/src/assets/app-icon.png" alt="PM" class="brand-icon-img" />
                 </div>
                 <span class="brand-text">PM</span>
             </div>
@@ -333,6 +333,7 @@ const onCreateNewProject = () => {
             model.value.description = ''
             model.value.projectName = ''
             formSubmitted.value = false
+            showModal.value = false
             getProjectList()
             // 通知其他组件数据已更新
             eventBus.emit(Events.PROJECT_CREATED, model.value.projectName)
@@ -355,23 +356,26 @@ const openDeleteDialog = (item: Project) => {
 const confirmDeleteProject = async () => {
     if (!projectToDelete.value) return
 
+    // 保存项目信息用于事件通知
+    const deletedProject = projectToDelete.value
+
     try {
         // 先删除关联的仓库记录
-        await db.execute('DELETE FROM repositories WHERE project_id = $1', [projectToDelete.value.id])
+        await db.execute('DELETE FROM repositories WHERE project_id = $1', [deletedProject.id])
         // 再删除项目
-        await db.execute('DELETE FROM projects WHERE id = $1', [projectToDelete.value.id])
+        await db.execute('DELETE FROM projects WHERE id = $1', [deletedProject.id])
 
         toast.add({
             severity: 'success',
             summary: '删除成功',
-            detail: `项目 "${projectToDelete.value.name}" 已删除`,
+            detail: `项目 "${deletedProject.name}" 已删除`,
             life: 3000
         })
         showDeleteConfirm.value = false
         projectToDelete.value = null
         getProjectList()
-        // 通知其他组件数据已更新
-        eventBus.emit(Events.PROJECT_DELETED, projectToDelete.value)
+        // 通知其他组件数据已更新（使用保存的项目信息）
+        eventBus.emit(Events.PROJECT_DELETED, deletedProject)
     } catch (error) {
         toast.add({
             severity: 'error',
@@ -380,6 +384,11 @@ const confirmDeleteProject = async () => {
             life: 3000
         })
     }
+}
+
+// 返回首页
+const goHome = () => {
+    router.push('/')
 }
 
 const search = ref('')
@@ -440,6 +449,18 @@ const searchProject = debounce(async () => {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0.25rem;
+    border-radius: 10px;
+}
+
+.brand:hover {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.brand:active {
+    transform: scale(0.98);
 }
 
 .brand-icon {
@@ -448,10 +469,21 @@ const searchProject = debounce(async () => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     border-radius: 10px;
-    color: white;
-    font-size: 1.25rem;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.2s ease;
+}
+
+.brand:hover .brand-icon {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.brand-icon-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .brand-text {

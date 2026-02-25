@@ -190,6 +190,20 @@
                 </template>
             </Card>
 
+            <Card class="action-card" @click="handleOpenVscode">
+                <template #content>
+                    <div class="action-item">
+                        <div class="action-icon" style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); color: #2563eb;">
+                            <i class="pi pi-microsoft"></i>
+                        </div>
+                        <div class="action-content">
+                            <div class="action-name">VSCode</div>
+                            <div class="action-desc">用 VSCode 打开</div>
+                        </div>
+                    </div>
+                </template>
+            </Card>
+
             <Card class="action-card" @click="handleDiff">
                 <template #content>
                     <div class="action-item">
@@ -500,6 +514,8 @@ async function handlePull() {
         )
         toast.add({ severity: 'success', summary: '拉取成功', detail: result, life: 3000 })
         await loadGitStatus()
+        // 通知其他组件刷新该仓库的状态
+        eventBus.emit(Events.REFRESH_REPOSITORY_STATUS, repo.id)
     } catch (error) {
         toast.add({ severity: 'error', summary: '拉取失败', detail: error as string, life: 3000 })
     } finally {
@@ -527,6 +543,8 @@ async function handlePush() {
         )
         toast.add({ severity: 'success', summary: '推送成功', detail: result, life: 3000 })
         await loadGitStatus()
+        // 通知其他组件刷新该仓库的状态
+        eventBus.emit(Events.REFRESH_REPOSITORY_STATUS, repo.id)
     } catch (error) {
         toast.add({ severity: 'error', summary: '推送失败', detail: error as string, life: 3000 })
     } finally {
@@ -585,6 +603,8 @@ async function handleCommit() {
         showCommitDialog.value = false
         commitMessage.value = ''
         commitFormSubmitted.value = false
+        // 通知其他组件刷新该仓库的状态
+        eventBus.emit(Events.REFRESH_REPOSITORY_STATUS, repo.id)
     } catch (error) {
         toast.add({ severity: 'error', summary: '提交失败', detail: error as string, life: 3000 })
     } finally {
@@ -597,10 +617,13 @@ async function handleUpdate() {
     if (!repositoryInfo.value) return
 
     loading.value.update = true
+    const repo = repositoryInfo.value
     try {
         const result = await svnApi.update(repositoryInfo.value.path)
         toast.add({ severity: 'success', summary: '更新成功', detail: result, life: 3000 })
         await loadSvnStatus()
+        // 通知其他组件刷新该仓库的状态
+        eventBus.emit(Events.REFRESH_REPOSITORY_STATUS, repo.id)
     } catch (error) {
         toast.add({ severity: 'error', summary: '更新失败', detail: error as string, life: 3000 })
     } finally {
@@ -615,6 +638,18 @@ async function handleTerminal() {
     try {
         await systemApi.openTerminal(repositoryInfo.value.path)
         toast.add({ severity: 'success', summary: '打开成功', detail: '终端已启动', life: 3000 })
+    } catch (error) {
+        toast.add({ severity: 'error', summary: '打开失败', detail: error as string, life: 3000 })
+    }
+}
+
+// 用 VSCode 打开
+async function handleOpenVscode() {
+    if (!repositoryInfo.value) return
+
+    try {
+        await systemApi.openInVscode(repositoryInfo.value.path)
+        toast.add({ severity: 'success', summary: '打开成功', detail: 'VSCode 已启动', life: 3000 })
     } catch (error) {
         toast.add({ severity: 'error', summary: '打开失败', detail: error as string, life: 3000 })
     }
@@ -691,14 +726,18 @@ onUnmounted(() => {
 function handleProjectDeleted(deletedProject: any) {
     if (!deletedProject || !repositoryInfo.value) return
 
-    // 如果当前查看的仓库属于被删除的项目，返回首页
-    if (repositoryInfo.value.project_id === deletedProject.id) {
+    // 如果当前查看的仓库属于被删除的项目，返回首页（使用 == 而不是 === 以避免类型问题）
+    if (repositoryInfo.value.project_id == deletedProject.id) {
         toast.add({
             severity: 'info',
             summary: '项目已删除',
             detail: '当前项目已被删除，返回首页',
             life: 3000
         })
+        // 清空仓库信息
+        repositoryInfo.value = null
+        gitStatus.value = null
+        svnStatus.value = null
         router.push('/')
     }
 }
@@ -707,14 +746,18 @@ function handleProjectDeleted(deletedProject: any) {
 function handleRepositoryDeleted(deletedRepository: any) {
     if (!deletedRepository || !repositoryInfo.value) return
 
-    // 如果当前查看的仓库被删除，返回项目详情页
-    if (repositoryInfo.value.id === deletedRepository.id) {
+    // 如果当前查看的仓库被删除，返回项目详情页（使用 == 而不是 === 以避免类型问题）
+    if (repositoryInfo.value.id == deletedRepository.id) {
         toast.add({
             severity: 'info',
             summary: '仓库已删除',
             detail: '当前仓库已被删除，返回项目详情',
             life: 3000
         })
+        // 清空仓库信息
+        repositoryInfo.value = null
+        gitStatus.value = null
+        svnStatus.value = null
         router.push(`/project/${repositoryInfo.value.project_id}`)
     }
 }

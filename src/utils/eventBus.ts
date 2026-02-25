@@ -76,5 +76,6 @@ export const Events = {
     // 数据刷新请求
     REFRESH_PROJECTS: 'refresh:projects',
     REFRESH_REPOSITORIES: 'refresh:repositories',
+    REFRESH_REPOSITORY_STATUS: 'refresh:repository_status',
     REFRESH_DASHBOARD: 'refresh:dashboard',
 } as const

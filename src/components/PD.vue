@@ -363,7 +363,6 @@ import { readDir } from '@tauri-apps/plugin-fs'
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
-import { Command } from '@tauri-apps/plugin-shell'
 import { gitApi, svnApi, systemApi } from '@/api'
 import { eventBus, Events } from '@/utils/eventBus'
 import type { Project, Repository, GitStatus, SvnStatus } from '@/types'
@@ -392,7 +391,22 @@ const batchResults = ref<Array<{ repo: Repository; success: boolean; message: st
 const showBatchResults = ref(false)
 
 async function openPjWithVscode(path: string) {
-    await Command.create('exec-sh', ['-Command', 'code', `'${path}'`]).execute()
+    try {
+        await systemApi.openInVscode(path)
+        toast.add({
+            severity: 'success',
+            summary: '打开成功',
+            detail: 'VSCode 已启动',
+            life: 3000
+        })
+    } catch (error) {
+        toast.add({
+            severity: 'error',
+            summary: '打开失败',
+            detail: error as string,
+            life: 5000
+        })
+    }
 }
 
 async function openPjWithFolder(path: string) {
@@ -445,25 +459,47 @@ watch(
 // 监听项目删除事件
 onMounted(() => {
     eventBus.on(Events.PROJECT_DELETED, handleProjectDeleted)
+    // 监听仓库状态变化事件
+    eventBus.on(Events.REFRESH_REPOSITORY_STATUS, handleRepositoryStatusRefresh)
 })
 
 onUnmounted(() => {
     eventBus.off(Events.PROJECT_DELETED, handleProjectDeleted)
+    eventBus.off(Events.REFRESH_REPOSITORY_STATUS, handleRepositoryStatusRefresh)
 })
 
 // 处理项目删除事件
 function handleProjectDeleted(deletedProject: any) {
     if (!deletedProject || !projectInfo.value) return
 
-    // 如果当前查看的项目被删除，返回首页
-    if (projectInfo.value.id === deletedProject.id) {
+    // 如果当前查看的项目被删除，返回首页（使用 == 而不是 === 以避免类型问题）
+    if (projectInfo.value.id == deletedProject.id) {
         toast.add({
             severity: 'info',
             summary: '项目已删除',
             detail: '当前项目已被删除，返回首页',
             life: 3000
         })
+        // 清空项目信息
+        projectInfo.value = null
+        repositoryList.value = []
         router.push('/')
+    }
+}
+
+// 处理仓库状态刷新事件
+async function handleRepositoryStatusRefresh(repoId: number | string) {
+    if (!repositoryList.value) return
+
+    // 在当前项目的仓库列表中查找该仓库
+    const repo = repositoryList.value.find(r => r.id === Number(repoId))
+    if (!repo) return
+
+    // 根据仓库类型刷新状态
+    if (repo.vcs === 'git') {
+        await loadGitStatus(repo)
+    } else if (repo.vcs === 'svn') {
+        await loadSvnStatus(repo)
     }
 }
 

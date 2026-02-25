@@ -6,7 +6,7 @@
                 <p>项目管理工具，高效管理你的代码仓库</p>
             </div>
             <div class="hero-icon">
-                <i class="pi pi-code"></i>
+                <img src="/src/assets/app-icon-large.png" alt="PM" class="hero-icon-img" />
             </div>
         </div>
 
@@ -157,10 +157,15 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
     border-radius: 16px;
-    color: #2563eb;
-    font-size: 2.5rem;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.hero-icon-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 /* ==================== Stats Grid ==================== */

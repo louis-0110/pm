@@ -93,6 +93,37 @@ async fn open_folder(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn open_in_vscode(path: String) -> Result<(), String> {
+    // 尝试使用 code 命令打开 VSCode
+    let result = Command::new("code")
+        .arg(&path)
+        .spawn();
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // 如果 code 命令失败，尝试常见的 VSCode 安装路径
+            #[cfg(target_os = "macos")]
+            {
+                // macOS 上尝试使用应用路径
+                let app_result = Command::new("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
+                    .arg(&path)
+                    .spawn();
+
+                if app_result.is_ok() {
+                    return Ok(());
+                }
+            }
+
+            Err(format!(
+                "无法打开 VSCode: {}\n\n请确保:\n1. VSCode 已安装\n2. 已添加 'code' 命令到 PATH\n\n在 VSCode 中按 Cmd+Shift+P，输入 'Shell Command: Install code command in PATH'",
+                e
+            ))
+        }
+    }
+}
+
+#[tauri::command]
 async fn get_repository_status(path: String) -> Result<GitStatus, String> {
     let repo = Repository::open(&path).map_err(|e| format!("无法打开仓库: {}", e))?;
 
@@ -100,8 +131,8 @@ async fn get_repository_status(path: String) -> Result<GitStatus, String> {
     let head = repo.head().map_err(|e| format!("无法获取HEAD: {}", e))?;
     let branch = head.shorthand().map(|s| s.to_string());
 
-    // 获取当前commit
-    let commit = head.name().map(|name| format!("{}", name));
+    // 获取当前 commit hash
+    let commit = head.target().map(|oid| oid.to_string());
 
     // 获取状态
     let mut opts = StatusOptions::new();
@@ -933,6 +964,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_folder,
+            open_in_vscode,
             get_repository_status,
             git_pull,
             git_push,

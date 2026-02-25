@@ -1,5 +1,40 @@
 /* ==================== 全局样式 ==================== */
 
+/* ==================== 字体设置 ==================== */
+/* 统一的中文字体栈，确保在各系统上显示一致 */
+html,
+body {
+    /* 中文字体栈：优先使用各系统的最佳中文字体 */
+    font-family:
+        /* macOS 优先字体 */
+        -apple-system,
+        BlinkMacSystemFont,
+        "PingFang SC",
+        "PingFang TC",
+        "PingFang HK",
+        /* Windows 优先字体 */
+        "Microsoft YaHei",
+        "微软雅黑",
+        /* Linux 优先字体 */
+        "WenQuanYi Micro Hei",
+        "Noto Sans CJK SC",
+        "Source Han Sans SC",
+        /* 备用字体 */
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        Roboto,
+        "Helvetica Neue",
+        Arial,
+        sans-serif;
+    /* 优化字体渲染 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-smoothing: antialiased;
+    /* 改善中文显示 */
+    text-rendering: optimizeLegibility;
+}
+
 /* ==================== 滚动条样式 ==================== */
 * {
     scrollbar-width: thin;
@@ -148,6 +183,38 @@ html, body {
 .loading {
     pointer-events: none;
     opacity: 0.6;
+}
+
+/* ==================== 字体样式优化 ==================== */
+/* 标题字体 */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    font-synthesis: style; /* 仅合成斜体，不合成粗体 */
+}
+
+/* 中文和数字之间的间距优化 */
+.chinese-text {
+    letter-spacing: 0.02em;
+}
+
+/* 代码字体（等宽字体） */
+code,
+pre,
+.code,
+.font-mono {
+    font-family:
+        "Consolas",
+        "Monaco",
+        "Courier New",
+        "SF Mono",
+        "Source Code Pro",
+        "Menlo",
+        monospace;
+}
+
+/* 数字字体优化（使用 tabular nums 防止数字跳动） */
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
 }
 
 /* ==================== 文本省略 ==================== */
