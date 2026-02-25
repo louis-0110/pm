@@ -233,11 +233,15 @@ async function loadConfig() {
         const homeDir = await configApi.getHomeDir()
         configPath.value = `${homeDir}/.pm/config.json`
     } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        console.error('配置加载失败:', errorMessage)
+        console.error('错误详情:', error)
+
         toast.add({
             severity: 'error',
             summary: '加载失败',
-            detail: error as string,
-            life: 3000
+            detail: errorMessage,
+            life: 5000
         })
     }
 }
@@ -259,11 +263,15 @@ async function saveSettings() {
             life: 3000
         })
     } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        console.error('配置保存失败:', errorMessage)
+        console.error('错误详情:', error)
+
         toast.add({
             severity: 'error',
             summary: '保存失败',
-            detail: error as string,
-            life: 3000
+            detail: errorMessage,
+            life: 5000
         })
     } finally {
         saving.value = false

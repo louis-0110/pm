@@ -91,3 +91,6 @@ export interface DbResult {
     lastInsertId: number
     rowsAffected: number
 }
+
+// 导出操作历史相关类型
+export * from './history'

@@ -24,13 +24,36 @@
                     </div>
                 </div>
             </div>
-            <Button
-                severity="secondary"
+            <div class="header-actions">
+                <Button
+                    severity="secondary"
                 size="small"
                 label="添加仓库"
-                icon="pi pi-plus"
-                @click="addRepository"
-            />
+                    icon="pi pi-plus"
+                    @click="addRepository"
+                />
+                <!-- 批量操作按钮组 -->
+                <div v-if="repositoryList && repositoryList.length > 1" class="batch-actions">
+                    <Button
+                        severity="secondary"
+                        size="small"
+                        icon="pi pi-download"
+                        label="全部拉取"
+                        @click="batchPull"
+                        :loading="batchLoading.pull"
+                        v-tooltip.top="'拉取所有仓库的最新代码'"
+                    />
+                    <Button
+                        severity="secondary"
+                        size="small"
+                        icon="pi pi-upload"
+                        label="全部推送"
+                        @click="batchPush"
+                        :loading="batchLoading.push"
+                        v-tooltip.top="'推送所有仓库到远程'"
+                    />
+                </div>
+            </div>
         </div>
 
         <!-- 仓库网格 -->
@@ -301,6 +324,36 @@
             </div>
         </form>
     </Dialog>
+
+    <!-- 批量操作结果对话框 -->
+    <Dialog
+        v-model:visible="showBatchResults"
+        modal
+        header="批量操作结果"
+        :style="{ width: '600px' }"
+        :dismissableMask="true"
+        :closeOnEscape="true"
+    >
+        <div class="batch-results-content">
+            <div
+                v-for="result in batchResults"
+                :key="result.repo.id"
+                class="batch-result-item"
+                :class="{ success: result.success, error: !result.success }"
+            >
+                <div class="result-icon">
+                    <i :class="result.success ? 'pi pi-check-circle' : 'pi pi-times-circle'" />
+                </div>
+                <div class="result-info">
+                    <div class="result-name">{{ result.repo.name }}</div>
+                    <div class="result-message">{{ result.message }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="dialog-footer">
+            <Button label="关闭" severity="secondary" text @click="showBatchResults = false" />
+        </div>
+    </Dialog>
 </template>
 
 <script setup lang="ts">
@@ -329,6 +382,14 @@ const projectInfo = ref<Project | null>(null)
 const repositoryList = ref<Repository[]>([])
 const formSubmitted = ref(false)
 const renameFormSubmitted = ref(false)
+
+// 批量操作状态
+const batchLoading = ref({
+    pull: false,
+    push: false
+})
+const batchResults = ref<Array<{ repo: Repository; success: boolean; message: string }>>([])
+const showBatchResults = ref(false)
 
 async function openPjWithVscode(path: string) {
     await Command.create('exec-sh', ['-Command', 'code', `'${path}'`]).execute()
@@ -470,6 +531,129 @@ const deleteRepository = async (item: Repository) => {
         detail: `仓库 "${item.name}" 已删除`,
         life: 3000,
     })
+}
+
+// ==================== 批量操作 ====================
+/**
+ * 批量拉取所有 Git 仓库和更新所有 SVN 仓库
+ */
+async function batchPull() {
+    if (!repositoryList.value.length) return
+
+    batchLoading.value.pull = true
+    batchResults.value = []
+
+    const gitRepos = repositoryList.value.filter(r => r.vcs === 'git')
+    const svnRepos = repositoryList.value.filter(r => r.vcs === 'svn')
+
+    let successCount = 0
+    let failCount = 0
+
+    // 批量处理 Git 仓库
+    for (const repo of gitRepos) {
+        try {
+            await gitApi.pull(repo.path)
+            batchResults.value.push({ repo, success: true, message: '拉取成功' })
+            successCount++
+            // 刷新状态
+            await loadGitStatus(repo)
+        } catch (error) {
+            batchResults.value.push({ repo, success: false, message: error as string })
+            failCount++
+        }
+    }
+
+    // 批量处理 SVN 仓库
+    for (const repo of svnRepos) {
+        try {
+            await svnApi.update(repo.path)
+            batchResults.value.push({ repo, success: true, message: '更新成功' })
+            successCount++
+            // 刷新状态
+            await loadSvnStatus(repo)
+        } catch (error) {
+            batchResults.value.push({ repo, success: false, message: error as string })
+            failCount++
+        }
+    }
+
+    batchLoading.value.pull = false
+
+    // 显示汇总结果
+    if (failCount === 0) {
+        toast.add({
+            severity: 'success',
+            summary: '批量操作成功',
+            detail: `成功更新 ${successCount} 个仓库`,
+            life: 3000
+        })
+    } else {
+        showBatchResults.value = true
+        toast.add({
+            severity: 'warn',
+            summary: '批量操作完成',
+            detail: `成功: ${successCount}, 失败: ${failCount}`,
+            life: 5000
+        })
+    }
+}
+
+/**
+ * 批量推送所有 Git 仓库
+ */
+async function batchPush() {
+    if (!repositoryList.value.length) return
+
+    // 只推送 Git 仓库
+    const gitRepos = repositoryList.value.filter(r => r.vcs === 'git')
+    if (!gitRepos.length) {
+        toast.add({
+            severity: 'info',
+            summary: '没有 Git 仓库',
+            detail: 'SVN 仓库不支持推送操作',
+            life: 3000
+        })
+        return
+    }
+
+    batchLoading.value.push = true
+    batchResults.value = []
+
+    let successCount = 0
+    let failCount = 0
+
+    for (const repo of gitRepos) {
+        try {
+            await gitApi.push(repo.path)
+            batchResults.value.push({ repo, success: true, message: '推送成功' })
+            successCount++
+            // 刷新状态
+            await loadGitStatus(repo)
+        } catch (error) {
+            batchResults.value.push({ repo, success: false, message: error as string })
+            failCount++
+        }
+    }
+
+    batchLoading.value.push = false
+
+    // 显示汇总结果
+    if (failCount === 0) {
+        toast.add({
+            severity: 'success',
+            summary: '批量推送成功',
+            detail: `成功推送 ${successCount} 个仓库`,
+            life: 3000
+        })
+    } else {
+        showBatchResults.value = true
+        toast.add({
+            severity: 'warn',
+            summary: '批量推送完成',
+            detail: `成功: ${successCount}, 失败: ${failCount}`,
+            life: 5000
+        })
+    }
 }
 
 function editPjName(item: any) {
@@ -627,6 +811,20 @@ watch(
 
 .page-header-content {
     flex: 1;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.batch-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-left: 1rem;
+    border-left: 1px solid #e2e8f0;
 }
 
 .page-title {
@@ -1112,6 +1310,75 @@ watch(
     border-radius: 10px;
     font-weight: 500;
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==================== 批量操作结果 ==================== */
+.batch-results-content {
+    max-height: 400px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.batch-result-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    transition: all 0.15s ease;
+}
+
+.batch-result-item.success {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.batch-result-item.error {
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+.batch-result-item .result-icon {
+    flex-shrink: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.batch-result-item.success .result-icon {
+    color: #16a34a;
+    font-size: 1.25rem;
+}
+
+.batch-result-item.error .result-icon {
+    color: #dc2626;
+    font-size: 1.25rem;
+}
+
+.batch-result-item .result-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.batch-result-item .result-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #0f172a;
+    margin-bottom: 0.125rem;
+}
+
+.batch-result-item .result-message {
+    font-size: 0.8125rem;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ==================== 响应式 ==================== */

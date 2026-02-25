@@ -466,24 +466,39 @@ async fn get_config() -> Result<AppConfig, String> {
     if !config_path.exists() {
         // 创建配置目录
         if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("无法创建配置目录: {}", e))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("无法创建配置目录 '{}': {}", parent.display(), e))?;
         }
 
         // 写入默认配置
         let default_config = AppConfig::default();
         let config_json = serde_json::to_string_pretty(&default_config)
             .map_err(|e| format!("序列化配置失败: {}", e))?;
-        fs::write(&config_path, config_json).map_err(|e| format!("写入配置文件失败: {}", e))?;
+
+        fs::write(&config_path, config_json)
+            .map_err(|e| format!("写入配置文件失败 '{}': {}", config_path.display(), e))?;
 
         return Ok(default_config);
     }
 
     // 读取配置文件
     let config_content = fs::read_to_string(&config_path)
-        .map_err(|e| format!("读取配置文件失败: {}", e))?;
+        .map_err(|e| format!("读取配置文件失败 '{}': {}", config_path.display(), e))?;
 
-    let config: AppConfig = serde_json::from_str(&config_content)
-        .map_err(|e| format!("解析配置文件失败: {}", e))?;
+    // 尝试解析配置，如果失败则使用默认配置并重新保存
+    let config: AppConfig = match serde_json::from_str(&config_content) {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!("配置文件解析失败: {}, 使用默认配置并重新保存", e);
+            // 使用默认配置并重新写入文件
+            let default_config = AppConfig::default();
+            let config_json = serde_json::to_string_pretty(&default_config)
+                .map_err(|e| format!("序列化配置失败: {}", e))?;
+            fs::write(&config_path, config_json)
+                .map_err(|e| format!("写入配置文件失败 '{}': {}", config_path.display(), e))?;
+            default_config
+        }
+    };
 
     Ok(config)
 }
@@ -494,14 +509,16 @@ async fn save_config(config: AppConfig) -> Result<(), String> {
 
     // 创建配置目录
     if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("无法创建配置目录: {}", e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("无法创建配置目录 '{}': {}", parent.display(), e))?;
     }
 
     // 序列化并写入配置
     let config_json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("序列化配置失败: {}", e))?;
 
-    fs::write(&config_path, config_json).map_err(|e| format!("写入配置文件失败: {}", e))?;
+    fs::write(&config_path, config_json)
+        .map_err(|e| format!("写入配置文件失败 '{}': {}", config_path.display(), e))?;
 
     Ok(())
 }

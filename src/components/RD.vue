@@ -115,6 +115,20 @@
                     </template>
                 </Card>
 
+                <Card class="action-card" @click="openCommitDialog" :class="{ disabled: !hasDirtyFiles() }">
+                    <template #content>
+                        <div class="action-item">
+                            <div class="action-icon">
+                                <i class="pi pi-check"></i>
+                            </div>
+                            <div class="action-content">
+                                <div class="action-name">提交</div>
+                                <div class="action-desc">{{ hasDirtyFiles() ? '提交当前更改' : '暂无更改' }}</div>
+                            </div>
+                        </div>
+                    </template>
+                </Card>
+
                 <Card class="action-card" @click="handlePush" :class="{ loading: loading.push }">
                     <template #content>
                         <div class="action-item">
@@ -166,7 +180,7 @@
                 <template #content>
                     <div class="action-item">
                         <div class="action-icon">
-                            <i class="pi pi-terminal"></i>
+                            <i class="pi pi-desktop"></i>
                         </div>
                         <div class="action-content">
                             <div class="action-name">终端</div>
@@ -180,7 +194,7 @@
                 <template #content>
                     <div class="action-item">
                         <div class="action-icon">
-                            <i class="pi pi-file-text"></i>
+                            <i class="pi pi-file-edit"></i>
                         </div>
                         <div class="action-content">
                             <div class="action-name">查看 Diff</div>
@@ -318,7 +332,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import dbFn from '@/db'
 import { gitApi, svnApi, systemApi } from '@/api'
-import { formatSvnDate } from '@/utils'
+import { formatSvnDate, withOperationHistory } from '@/utils'
 import type { Repository, GitStatus, SvnStatus } from '@/types'
 
 const db = await dbFn
@@ -470,8 +484,19 @@ async function handlePull() {
     if (!repositoryInfo.value) return
 
     loading.value.pull = true
+    const repo = repositoryInfo.value
+
     try {
-        const result = await gitApi.pull(repositoryInfo.value.path)
+        const result = await withOperationHistory(
+            () => gitApi.pull(repo.path),
+            {
+                type: 'git_pull',
+                repositoryName: repo.name,
+                repositoryPath: repo.path,
+                successMessage: '拉取成功',
+                errorPrefix: '拉取失败'
+            }
+        )
         toast.add({ severity: 'success', summary: '拉取成功', detail: result, life: 3000 })
         await loadGitStatus()
     } catch (error) {
@@ -486,8 +511,19 @@ async function handlePush() {
     if (!repositoryInfo.value) return
 
     loading.value.push = true
+    const repo = repositoryInfo.value
+
     try {
-        const result = await gitApi.push(repositoryInfo.value.path)
+        const result = await withOperationHistory(
+            () => gitApi.push(repo.path),
+            {
+                type: 'git_push',
+                repositoryName: repo.name,
+                repositoryPath: repo.path,
+                successMessage: '推送成功',
+                errorPrefix: '推送失败'
+            }
+        )
         toast.add({ severity: 'success', summary: '推送成功', detail: result, life: 3000 })
         await loadGitStatus()
     } catch (error) {
@@ -508,14 +544,37 @@ async function handleCommit() {
     }
 
     loading.value.commit = true
+    const repo = repositoryInfo.value
+
     try {
         let result: string
+        let operationType: 'git_commit' | 'svn_commit'
 
-        if (repositoryInfo.value.vcs === 'git') {
-            result = await gitApi.commit(repositoryInfo.value.path, commitMessage.value)
+        if (repo.vcs === 'git') {
+            operationType = 'git_commit'
+            result = await withOperationHistory(
+                () => gitApi.commit(repo.path, commitMessage.value),
+                {
+                    type: operationType,
+                    repositoryName: repo.name,
+                    repositoryPath: repo.path,
+                    successMessage: commitMessage.value,
+                    errorPrefix: '提交失败'
+                }
+            )
             await loadGitStatus()
-        } else if (repositoryInfo.value.vcs === 'svn') {
-            result = await svnApi.commit(repositoryInfo.value.path, commitMessage.value)
+        } else if (repo.vcs === 'svn') {
+            operationType = 'svn_commit'
+            result = await withOperationHistory(
+                () => svnApi.commit(repo.path, commitMessage.value),
+                {
+                    type: operationType,
+                    repositoryName: repo.name,
+                    repositoryPath: repo.path,
+                    successMessage: commitMessage.value,
+                    errorPrefix: '提交失败'
+                }
+            )
             await loadSvnStatus()
         } else {
             throw new Error('不支持的版本控制系统')
