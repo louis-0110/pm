@@ -222,13 +222,37 @@
         v-model:visible="isShowRepository"
         modal
         header="添加代码仓库"
-        :style="{ width: '500px' }"
+        :style="{ width: '550px' }"
         @after-hide="onAfterLeave"
         :dismissableMask="true"
         :closeOnEscape="true"
     >
         <form @submit.prevent="onCreateNewRepository">
             <div class="dialog-content">
+                <!-- 模式选择 -->
+                <div class="form-field">
+                    <label>
+                        <i class="pi pi-plus-circle"></i>
+                        添加方式
+                    </label>
+                    <div class="mode-selector">
+                        <Button
+                            :label="'本地路径'"
+                            :severity="addMode === 'local' ? 'primary' : 'secondary'"
+                            :outlined="addMode !== 'local'"
+                            size="small"
+                            @click="addMode = 'local'"
+                        />
+                        <Button
+                            :label="'URL 克隆'"
+                            :severity="addMode === 'clone' ? 'primary' : 'secondary'"
+                            :outlined="addMode !== 'clone'"
+                            size="small"
+                            @click="addMode = 'clone'"
+                        />
+                    </div>
+                </div>
+
                 <div class="form-field">
                     <label>
                         <i class="pi pi-tag"></i>
@@ -246,21 +270,100 @@
                     >
                 </div>
 
-                <div class="form-field">
-                    <label>
-                        <i class="pi pi-folder"></i>
-                        本地路径
-                    </label>
-                    <div class="path-display">
-                        <i class="pi pi-folder"></i>
-                        <span>{{ newRepository.path || '未选择' }}</span>
-                        <Tag
-                            v-if="newRepository.vcs"
-                            :value="newRepository.vcs.toUpperCase()"
-                            :severity="newRepository.vcs === 'git' ? 'success' : 'warning'"
-                        />
+                <!-- 本地路径模式 -->
+                <template v-if="addMode === 'local'">
+                    <div class="form-field">
+                        <label>
+                            <i class="pi pi-folder"></i>
+                            本地路径
+                        </label>
+                        <div class="path-input-group">
+                            <InputText
+                                :model-value="newRepository.path || ''"
+                                placeholder="点击右侧按钮选择仓库目录"
+                                :class="{ 'p-invalid': !newRepository.path && formSubmitted }"
+                                readonly
+                                class="path-input"
+                            />
+                            <Button
+                                icon="pi pi-folder-open"
+                                severity="secondary"
+                                outlined
+                                @click="selectLocalPath"
+                                v-tooltip.top="'选择文件夹'"
+                            />
+                        </div>
+                        <small
+                            class="p-error"
+                            v-if="!newRepository.path && formSubmitted"
+                            >请选择仓库目录</small
+                        >
+                        <div class="path-info" v-if="newRepository.path">
+                            <Tag
+                                v-if="newRepository.vcs"
+                                :value="newRepository.vcs.toUpperCase()"
+                                :severity="newRepository.vcs === 'git' ? 'success' : 'warning'"
+                            />
+                            <small class="p-hint" v-else>
+                                未检测到版本控制系统
+                            </small>
+                        </div>
                     </div>
-                </div>
+                </template>
+
+                <!-- URL 克隆模式 -->
+                <template v-if="addMode === 'clone'">
+                    <div class="form-field">
+                        <label>
+                            <i class="pi pi-link"></i>
+                            仓库 URL
+                        </label>
+                        <InputText
+                            v-model="cloneUrl"
+                            placeholder="例如：https://github.com/user/repo.git"
+                            :class="{ 'p-invalid': !cloneUrl && formSubmitted }"
+                        />
+                        <small
+                            class="p-error"
+                            v-if="!cloneUrl && formSubmitted"
+                            >请输入仓库 URL</small
+                        >
+                        <small class="p-hint" v-if="cloneUrl && !newRepository.vcs">
+                            支持 Git (.git) 和 SVN (svn://) URL
+                        </small>
+                        <small class="p-success" v-if="newRepository.vcs">
+                            检测到 {{ newRepository.vcs.toUpperCase() }} 仓库
+                        </small>
+                    </div>
+
+                    <div class="form-field">
+                        <label>
+                            <i class="pi pi-folder"></i>
+                            存储位置
+                        </label>
+                        <div class="path-input-group">
+                            <InputText
+                                v-model="cloneTargetPath"
+                                placeholder="选择克隆目标文件夹"
+                                :class="{ 'p-invalid': !cloneTargetPath && formSubmitted }"
+                                readonly
+                                class="path-input"
+                            />
+                            <Button
+                                icon="pi pi-folder-open"
+                                severity="secondary"
+                                outlined
+                                @click="selectCloneTarget"
+                                v-tooltip.top="'选择文件夹'"
+                            />
+                        </div>
+                        <small
+                            class="p-error"
+                            v-if="!cloneTargetPath && formSubmitted"
+                            >请选择存储位置</small
+                        >
+                    </div>
+                </template>
             </div>
 
             <div class="dialog-footer">
@@ -272,8 +375,9 @@
                 />
                 <Button
                     type="submit"
-                    label="添加"
+                    :label="addMode === 'clone' ? '克隆并添加' : '添加'"
                     severity="primary"
+                    :loading="isCloning"
                 />
             </div>
         </form>
@@ -431,9 +535,16 @@ const isShowRePjName = ref(false)
 const newRepository = ref({
     name: '',
     path: '',
+    url: '',
     vcs: '',
     project_id: route.params.id,
 })
+
+// 克隆模式相关状态
+const addMode = ref<'local' | 'clone'>('local')
+const cloneUrl = ref('')
+const cloneTargetPath = ref('')
+const isCloning = ref(false)
 
 const pjInfo = ref({
     name: '',
@@ -510,11 +621,80 @@ async function onCreateNewRepository() {
         return
     }
 
+    // 克隆模式
+    if (addMode.value === 'clone') {
+        if (!cloneUrl.value || !cloneTargetPath.value) {
+            return
+        }
+
+        isCloning.value = true
+
+        try {
+            // 执行克隆
+            if (newRepository.value.vcs === 'git') {
+                await gitApi.clone(cloneUrl.value, cloneTargetPath.value)
+            } else if (newRepository.value.vcs === 'svn') {
+                await svnApi.checkout(cloneUrl.value, cloneTargetPath.value)
+            } else {
+                throw new Error('无法识别的仓库类型')
+            }
+
+            // 克隆成功，保存到数据库
+            const repoPath = cloneTargetPath.value
+            const res = await db.execute(
+                'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
+                [
+                    newRepository.value.name,
+                    repoPath,
+                    cloneUrl.value,
+                    newRepository.value.project_id,
+                    newRepository.value.vcs,
+                ],
+            )
+
+            if (res.rowsAffected < 1) {
+                toast.add({
+                    severity: 'warn',
+                    summary: '克隆成功但添加失败',
+                    detail: '仓库已克隆但可能已存在于列表中',
+                    life: 3000,
+                })
+            } else {
+                toast.add({
+                    severity: 'success',
+                    summary: '克隆成功',
+                    detail: `仓库 "${newRepository.value.name}" 已克隆并添加`,
+                    life: 3000,
+                })
+            }
+
+            isShowRepository.value = false
+
+            // 刷新仓库列表
+            if (projectInfo.value) {
+                await getRepositories(projectInfo.value.id)
+                eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
+            }
+        } catch (error) {
+            toast.add({
+                severity: 'error',
+                summary: '克隆失败',
+                detail: error as string,
+                life: 5000,
+            })
+        } finally {
+            isCloning.value = false
+        }
+        return
+    }
+
+    // 本地路径模式
     const res = await db.execute(
-        'INSERT OR IGNORE INTO repositories (name, path, project_id, vcs) VALUES ($1, $2, $3, $4) ',
+        'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
         [
             newRepository.value.name,
             newRepository.value.path,
+            newRepository.value.url || null,
             newRepository.value.project_id,
             newRepository.value.vcs,
         ],
@@ -543,19 +723,34 @@ async function onCreateNewRepository() {
     }
 }
 
-async function addRepository() {
-    // 防止重复打开
-    if (isOpeningDialog) return
+// 打开添加仓库对话框
+function addRepository() {
+    // 重置表单数据
+    newRepository.value = {
+        name: '',
+        path: '',
+        url: '',
+        vcs: '',
+        project_id: route.params.id,
+    }
+    addMode.value = 'local'
+    cloneUrl.value = ''
+    cloneTargetPath.value = ''
+    formSubmitted.value = false
 
+    // 直接打开对话框
+    isShowRepository.value = true
+}
+
+// 选择本地仓库路径
+async function selectLocalPath() {
     const result = await open({
         multiple: false,
         directory: true,
     })
 
     if (result) {
-        isOpeningDialog = true
-
-        //版本管理工具
+        // 检测版本管理工具
         let vcs = ''
         const entries = await readDir(result)
         for (const entry of entries) {
@@ -568,18 +763,78 @@ async function addRepository() {
             }
         }
 
-        // 先设置数据
         newRepository.value.path = result
         newRepository.value.vcs = vcs
-        formSubmitted.value = false
-
-        // 使用 nextTick 确保数据更新后再打开 Dialog
-        nextTick(() => {
-            isShowRepository.value = true
-            isOpeningDialog = false
-        })
     }
 }
+
+// 选择克隆目标文件夹
+async function selectCloneTarget() {
+    const result = await open({
+        multiple: false,
+        directory: true,
+    })
+
+    if (result) {
+        cloneTargetPath.value = result
+    }
+}
+
+// 从 URL 检测 VCS 类型
+function detectVcsFromUrl(url: string): string {
+    const lowerUrl = url.toLowerCase()
+    if (lowerUrl.startsWith('svn://') || lowerUrl.startsWith('svn+')) {
+        return 'svn'
+    }
+    // Git 支持多种协议：https, git@, git://, ssh://
+    if (lowerUrl.includes('.git') ||
+        lowerUrl.startsWith('git@') ||
+        lowerUrl.startsWith('git://') ||
+        lowerUrl.startsWith('https://github.com') ||
+        lowerUrl.startsWith('https://gitlab.com') ||
+        lowerUrl.startsWith('https://gitee.com') ||
+        lowerUrl.startsWith('https://bitbucket.org')) {
+        return 'git'
+    }
+    return ''
+}
+
+// 从 URL 提取仓库名称
+function extractRepoNameFromUrl(url: string): string {
+    try {
+        // 移除 .git 后缀
+        let cleanUrl = url.replace(/\.git$/, '')
+        // 提取最后一段路径
+        const parts = cleanUrl.split('/')
+        const lastPart = parts[parts.length - 1]
+        // 如果是 git@ 格式，需要处理
+        if (lastPart.includes(':')) {
+            const colonParts = lastPart.split(':')
+            return colonParts[colonParts.length - 1]
+        }
+        return lastPart || ''
+    } catch {
+        return ''
+    }
+}
+
+// 监听 cloneUrl 变化，自动检测 VCS 类型和提取名称
+watch(cloneUrl, (newUrl) => {
+    if (newUrl) {
+        const vcs = detectVcsFromUrl(newUrl)
+        newRepository.value.vcs = vcs
+
+        // 如果名称为空，自动从 URL 提取
+        if (!newRepository.value.name) {
+            const repoName = extractRepoNameFromUrl(newUrl)
+            if (repoName) {
+                newRepository.value.name = repoName
+            }
+        }
+    } else {
+        newRepository.value.vcs = ''
+    }
+})
 
 const deleteRepository = async (item: Repository) => {
     await db.execute('DELETE FROM repositories WHERE id = $1', [item.id])
@@ -754,8 +1009,14 @@ async function onUpdatePjName() {
 function onAfterLeave() {
     newRepository.value.name = ''
     newRepository.value.path = ''
+    newRepository.value.url = ''
     newRepository.value.vcs = ''
     formSubmitted.value = false
+    // 重置克隆模式相关状态
+    addMode.value = 'local'
+    cloneUrl.value = ''
+    cloneTargetPath.value = ''
+    isCloning.value = false
 }
 
 function onAfterLeaveRePjName() {
@@ -1332,6 +1593,54 @@ watch(
 
 .form-field :deep(.p-inputtext) {
     width: 100%;
+}
+
+/* 模式选择器 */
+.mode-selector {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.mode-selector :deep(.p-button) {
+    flex: 1;
+    border-radius: 8px;
+}
+
+/* 路径输入组 */
+.path-input-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.path-input-group .path-input {
+    flex: 1;
+}
+
+.path-input-group :deep(.p-button) {
+    flex-shrink: 0;
+}
+
+/* 提示文字 */
+.p-hint {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.p-success {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: #16a34a;
+}
+
+/* 路径信息显示 */
+.path-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
 }
 
 .path-display {

@@ -613,6 +613,73 @@ async fn get_home_dir() -> Result<String, String> {
         .ok_or("无法获取用户目录".to_string())
 }
 
+#[tauri::command]
+async fn git_clone(url: String, target_path: String) -> Result<String, String> {
+    // 验证 URL 不为空
+    if url.trim().is_empty() {
+        return Err("Git URL 不能为空".to_string());
+    }
+
+    // 验证目标路径不为空
+    if target_path.trim().is_empty() {
+        return Err("目标路径不能为空".to_string());
+    }
+
+    // 执行 git clone 命令
+    let output = Command::new("git")
+        .args(["clone", &url, &target_path])
+        .output()
+        .map_err(|e| format!("执行 git clone 失败: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let message = if stdout.trim().is_empty() {
+            "克隆成功".to_string()
+        } else {
+            stdout.trim().to_string()
+        };
+        Ok(message)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("克隆失败: {}", stderr))
+    }
+}
+
+#[tauri::command]
+async fn svn_checkout(url: String, target_path: String) -> Result<String, String> {
+    // 检查 SVN 是否已安装
+    check_svn_installed()?;
+
+    // 验证 URL 不为空
+    if url.trim().is_empty() {
+        return Err("SVN URL 不能为空".to_string());
+    }
+
+    // 验证目标路径不为空
+    if target_path.trim().is_empty() {
+        return Err("目标路径不能为空".to_string());
+    }
+
+    // 执行 svn checkout 命令
+    let output = Command::new("svn")
+        .args(["checkout", &url, &target_path])
+        .output()
+        .map_err(|e| format!("执行 svn checkout 失败: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // 从输出中提取版本信息，例如 "Checked out revision 12345"
+        let summary = stdout
+            .lines()
+            .find(|l| l.contains("Checked out revision") || l.contains("取出版本"))
+            .unwrap_or("检出成功");
+        Ok(summary.to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("检出失败: {}", stderr))
+    }
+}
+
 // ==================== SVN Commands ====================
 
 /// 检查 SVN 是否已安装
@@ -970,6 +1037,7 @@ pub fn run() {
             git_push,
             git_commit,
             git_diff,
+            git_clone,
             open_terminal,
             test_git_auth,
             get_config,
@@ -981,7 +1049,8 @@ pub fn run() {
             svn_diff,
             test_svn_auth,
             svn_add,
-            svn_revert
+            svn_revert,
+            svn_checkout
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

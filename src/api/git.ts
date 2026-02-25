@@ -43,4 +43,11 @@ export const gitApi = {
     async testAuth(path: string): Promise<string> {
         return invoke<string>('test_git_auth', { path })
     },
+
+    /**
+     * Git 克隆
+     */
+    async clone(url: string, targetPath: string): Promise<string> {
+        return invoke<string>('git_clone', { url, targetPath })
+    },
 }

@@ -50,4 +50,11 @@ export const svnApi = {
     async revert(path: string, files?: string[]): Promise<string> {
         return invoke<string>('svn_revert', { path, files })
     },
+
+    /**
+     * SVN 检出
+     */
+    async checkout(url: string, targetPath: string): Promise<string> {
+        return invoke<string>('svn_checkout', { url, targetPath })
+    },
 }
