@@ -11,128 +11,118 @@ on:
       - main
   workflow_dispatch:
 
+# 默认只读权限
+permissions:
+  contents: read
+
 jobs:
+
+  # =========================
+  # 1️⃣ Build Job（不发布）
+  # =========================
   build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
-            target: 'aarch64-apple-darwin'
-            name: 'macOS (Apple Silicon)'
-          - platform: 'macos-latest'
-            target: 'x86_64-apple-darwin'
-            name: 'macOS (Intel)'
-          - platform: 'ubuntu-22.04'
-            target: 'x86_64-unknown-linux-gnu'
-            name: 'Linux'
-          - platform: 'windows-latest'
-            target: 'x86_64-pc-windows-msvc'
-            name: 'Windows'
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            name: macOS-AppleSilicon
+
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            name: macOS-Intel
+
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            name: Linux
+
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: Windows
 
     runs-on: ${{ matrix.platform }}
     name: Build ${{ matrix.name }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install dependencies (Ubuntu only)
+      # Linux 依赖
+      - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v3
         with:
           version: 9
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Install frontend dependencies
+      - name: Install frontend deps
         run: pnpm install
 
-      - name: Build Tauri app
+      # 🔹 只构建，不创建 release
+      - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'PM v__VERSION__'
-          releaseBody: 'See CHANGELOG.md for details.'
-          releaseDraft: true
-          prerelease: false
           target: ${{ matrix.target }}
+          releaseDraft: false
+          prerelease: false
           args: ${{ matrix.platform == 'ubuntu-22.04' && '--bundles appimage,deb' || '' }}
 
-      - name: Upload artifacts (macOS)
-        if: matrix.platform == 'macos-latest'
+      # 上传 artifacts（供 release job 使用）
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pm-${{ matrix.target }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
+          name: ${{ matrix.name }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/**
           retention-days: 7
 
-      - name: Upload artifacts (Windows)
-        if: matrix.platform == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pm-${{ matrix.target }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
-          retention-days: 7
 
-      - name: Upload artifacts (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pm-${{ matrix.target }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
-            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
-          retention-days: 7
-
-  # Release job - only runs on tags
+  # =========================
+  # 2️⃣ Release Job（只在 tag 触发）
+  # =========================
   release:
     needs: build
-    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    # 只有这里有写权限
     permissions:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Display structure of downloaded files
+      - name: Show artifacts
         run: ls -R artifacts
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/**/*
+          tag_name: ${{ github.ref_name }}
+          name: PM ${{ github.ref_name }}
+          draft: false
           generate_release_notes: true
-          draft: true
+          files: artifacts/**/*
