@@ -24,11 +24,21 @@ export default async () => {
             );`
         )
 
+        // 数据库迁移：添加缺失的列（如果不存在）
+        // 检查 url 列是否存在
+        const columns = await db.select<Array<{ name: string }>>(
+            "SELECT name FROM pragma_table_info('repositories') WHERE name = 'url'"
+        )
+        if (columns.length === 0) {
+            console.log('migrating: adding url column to repositories table')
+            await db.execute('ALTER TABLE repositories ADD COLUMN url TEXT')
+        }
+
         db.execute(
             `CREATE TRIGGER IF NOT EXISTS update_repositories_timestamp
             AFTER UPDATE ON repositories
             BEGIN
-                UPDATE repositories 
+                UPDATE repositories
                 SET updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
                 WHERE id = OLD.id;
             END;`

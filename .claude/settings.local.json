@@ -40,7 +40,8 @@
       "Bash(pnpm tauri build)",
       "Bash(pnpm tauri build --no-bundle)",
       "Bash(pnpm build)",
-      "Bash(rustc --version)"
+      "Bash(rustc --version)",
+      "Bash(pnpm tauri build --debug)"
     ]
   }
 }

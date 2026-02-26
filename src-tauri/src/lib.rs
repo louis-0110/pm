@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use tauri::Manager;
 
 #[derive(Debug, Serialize)]
 pub struct GitStatus {
@@ -1477,6 +1478,27 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            // 获取主窗口
+            let windows = app.webview_windows();
+            let main_window = windows.get("main").expect("无法获取主窗口");
+
+            // 根据操作系统设置窗口装饰
+            #[cfg(target_os = "macos")]
+            {
+                // macOS: 启用装饰以显示红绿灯按钮
+                // titleBarStyle: Overlay 已在 tauri.conf.json 中设置
+                main_window.set_decorations(true).expect("无法设置窗口装饰");
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                // Windows/Linux: 禁用装饰，使用自定义标题栏
+                main_window.set_decorations(false).expect("无法设置窗口装饰");
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             open_folder,
             open_in_vscode,
