@@ -99,28 +99,80 @@ async fn open_in_vscode(path: String) -> Result<(), String> {
         .arg(&path)
         .spawn();
 
-    match result {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            // 如果 code 命令失败，尝试常见的 VSCode 安装路径
-            #[cfg(target_os = "macos")]
-            {
-                // macOS 上尝试使用应用路径
-                let app_result = Command::new("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
-                    .arg(&path)
-                    .spawn();
+    if result.is_ok() {
+        return Ok(());
+    }
 
-                if app_result.is_ok() {
+    // code 命令失败，尝试常见的安装路径
+    #[cfg(target_os = "windows")]
+    {
+        // Windows 上常见的 VSCode 安装路径
+        let common_paths = vec![
+            "C:\\Program Files\\Microsoft VS Code\\Code.exe",
+            "C:\\Program Files (x86)\\Microsoft VS Code\\Code.exe",
+            // 用户安装路径（需要获取用户目录）
+        ];
+
+        // 尝试从用户目录获取安装路径
+        if let Some(home_dir) = dirs::home_dir() {
+            let user_path = home_dir.join("AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe");
+            if user_path.exists() {
+                if Command::new(&user_path).arg(&path).spawn().is_ok() {
                     return Ok(());
                 }
             }
+        }
 
-            Err(format!(
-                "无法打开 VSCode: {}\n\n请确保:\n1. VSCode 已安装\n2. 已添加 'code' 命令到 PATH\n\n在 VSCode 中按 Cmd+Shift+P，输入 'Shell Command: Install code command in PATH'",
-                e
-            ))
+        // 尝试其他常见路径
+        for vscode_path in common_paths {
+            if std::path::Path::new(vscode_path).exists() {
+                if Command::new(vscode_path).arg(&path).spawn().is_ok() {
+                    return Ok(());
+                }
+            }
         }
     }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS 上尝试使用应用路径
+        if Command::new("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
+            .arg(&path)
+            .spawn()
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Linux 上常见的 VSCode 路径
+        let linux_paths = vec![
+            "/usr/bin/code",
+            "/usr/local/bin/code",
+            "/var/lib/flatpak/app/com.visualstudio.code/bin/code",
+        ];
+
+        for vscode_path in linux_paths {
+            if std::path::Path::new(vscode_path).exists() {
+                if Command::new(vscode_path).arg(&path).spawn().is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    Err(format!(
+        "无法打开 VSCode\n\n请确保:\n\
+        1. VSCode 已安装\n\
+        2. 已添加 'code' 命令到 PATH\n\n\
+        如何添加 'code' 命令:\n\
+        - 打开 VSCode\n\
+        - 按 Ctrl+Shift+P\n\
+        - 输入 'Shell Command: Install code command in PATH'\n\
+        - 点击安装"
+    ))
 }
 
 #[tauri::command]
@@ -662,23 +714,61 @@ async fn git_clone(url: String, target_path: String) -> Result<String, String> {
         return Err("目标路径不能为空".to_string());
     }
 
-    // 执行 git clone 命令
-    let output = Command::new("git")
-        .args(["clone", &url, &target_path])
-        .output()
-        .map_err(|e| format!("执行 git clone 失败: {}", e))?;
+    // 在 Windows 上使用 PowerShell 以获得更好的 Unicode 支持
+    #[cfg(target_os = "windows")]
+    {
+        // 转义路径中的特殊字符
+        let url_escaped = url.replace('"', "`\"");
+        let path_escaped = target_path.replace('"', "`\"");
 
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let message = if stdout.trim().is_empty() {
-            "克隆成功".to_string()
+        let ps_command = format!(
+            "git clone \"{}\" \"{}\"",
+            url_escaped, path_escaped
+        );
+
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_command])
+            .output()
+            .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let message = if stdout.trim().is_empty() {
+                "克隆成功".to_string()
+            } else {
+                stdout.trim().to_string()
+            };
+            Ok(message)
         } else {
-            stdout.trim().to_string()
-        };
-        Ok(message)
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("克隆失败: {}", stderr))
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let error_msg = stderr.trim().to_string();
+            if error_msg.is_empty() {
+                Err("克隆失败：未知错误".to_string())
+            } else {
+                Err(format!("克隆失败: {}", error_msg))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("git")
+            .args(["clone", &url, &target_path])
+            .output()
+            .map_err(|e| format!("执行 git clone 失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let message = if stdout.trim().is_empty() {
+                "克隆成功".to_string()
+            } else {
+                stdout.trim().to_string()
+            };
+            Ok(message)
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("克隆失败: {}", stderr))
+        }
     }
 }
 
@@ -697,23 +787,104 @@ async fn svn_checkout(url: String, target_path: String) -> Result<String, String
         return Err("目标路径不能为空".to_string());
     }
 
-    // 执行 svn checkout 命令
-    let output = Command::new("svn")
-        .args(["checkout", &url, &target_path])
-        .output()
-        .map_err(|e| format!("执行 svn checkout 失败: {}", e))?;
+    // 在 Windows 上使用 PowerShell 并 URL 编码中文字符
+    #[cfg(target_os = "windows")]
+    {
+        // 使用 PowerShell 的 [System.URI]::EscapeDataString() 来 URL 编码
+        // 这能正确处理中文字符，将它们转换为 UTF-8 URL 编码
+        // 例如："项目源代码" → "%E9%A1%B9%E7%9B%AE%E6%BA%90%E4%BB%A3%E7%A0%81"
 
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        // 从输出中提取版本信息，例如 "Checked out revision 12345"
-        let summary = stdout
-            .lines()
-            .find(|l| l.contains("Checked out revision") || l.contains("取出版本"))
-            .unwrap_or("检出成功");
-        Ok(summary.to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("检出失败: {}", stderr))
+        // 使用 PowerShell 直接命令，避免脚本文件的转义问题
+        // 使用 [System.URI]::EscapeDataString() 来 URL 编码中文字符
+        let url_encoded = if url.contains('/') && (url.starts_with("http://") || url.starts_with("https://")) {
+            // 解析 URL 并编码路径部分
+            if let Some(scheme_end) = url.find("://") {
+                let after_scheme = &url[scheme_end + 3..];
+                if let Some(path_start) = after_scheme.find('/') {
+                    let base = &url[..scheme_end + 3 + path_start];
+                    let path = &after_scheme[path_start..];
+
+                    // 分割路径并编码每个段
+                    let segments: Vec<&str> = path.split('/').collect();
+                    let encoded_segments: Vec<String> = segments
+                        .iter()
+                        .map(|s| {
+                            if s.is_empty() {
+                                String::new()
+                            } else {
+                                // 使用 PowerShell 进行 URL 编码
+                                let encode_cmd = format!("[System.URI]::EscapeDataString('{}')", s.replace('\'', "''"));
+                                match Command::new("powershell")
+                                    .args(["-NoProfile", "-Command", &encode_cmd])
+                                    .output()
+                                {
+                                    Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                                    Err(_) => s.to_string(),
+                                }
+                            }
+                        })
+                        .collect();
+
+                    format!("{}{}", base, encoded_segments.join("/"))
+                } else {
+                    url.clone()
+                }
+            } else {
+                url.clone()
+            }
+        } else {
+            url.clone()
+        };
+
+        // 转义本地路径中的特殊字符
+        let path_escaped = target_path.replace('"', "`\"");
+
+        let ps_command = format!("svn checkout \"{}\" \"{}\"", url_encoded, path_escaped);
+
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_command])
+            .output()
+            .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // 从输出中提取版本信息
+            let summary = stdout
+                .lines()
+                .find(|l| l.contains("Checked out revision") || l.contains("取出版本") || l.trim().starts_with("A"))
+                .unwrap_or("检出成功");
+            Ok(summary.to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let error_msg = stderr.trim().to_string();
+            if error_msg.is_empty() {
+                Err(format!("检出失败：未知错误\n输出: {}", stdout))
+            } else {
+                Err(format!("检出失败: {}\n输出: {}", error_msg, stdout))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("svn")
+            .args(["checkout", &url, &target_path])
+            .output()
+            .map_err(|e| format!("执行 svn checkout 失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // 从输出中提取版本信息，例如 "Checked out revision 12345"
+            let summary = stdout
+                .lines()
+                .find(|l| l.contains("Checked out revision") || l.contains("取出版本"))
+                .unwrap_or("检出成功");
+            Ok(summary.to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("检出失败: {}", stderr))
+        }
     }
 }
 
@@ -871,22 +1042,52 @@ async fn get_svn_status(path: String) -> Result<SvnStatus, String> {
 async fn svn_update(path: String) -> Result<String, String> {
     check_svn_installed()?;
 
-    let output = Command::new("svn")
-        .args(["update", &path])
-        .output()
-        .map_err(|e| format!("执行 svn update 失败: {}", e))?;
+    // 在 Windows 上使用 PowerShell 以获得更好的 Unicode 支持
+    #[cfg(target_os = "windows")]
+    {
+        let path_escaped = path.replace('"', "`\"");
 
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        // 解析更新摘要，例如 "Updated to revision 12345"
-        let summary = stdout
-            .lines()
-            .find(|l| l.contains("revision") || l.contains("更新到"))
-            .unwrap_or("更新成功");
-        Ok(summary.to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("更新失败: {}", stderr))
+        let ps_command = format!(
+            "svn update \"{}\"",
+            path_escaped
+        );
+
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_command])
+            .output()
+            .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let summary = stdout
+                .lines()
+                .find(|l| l.contains("revision") || l.contains("更新到"))
+                .unwrap_or("更新成功");
+            Ok(summary.to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("更新失败: {}", stderr))
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("svn")
+            .args(["update", &path])
+            .output()
+            .map_err(|e| format!("执行 svn update 失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let summary = stdout
+                .lines()
+                .find(|l| l.contains("revision") || l.contains("更新到"))
+                .unwrap_or("更新成功");
+            Ok(summary.to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("更新失败: {}", stderr))
+        }
     }
 }
 
@@ -898,22 +1099,53 @@ async fn svn_commit(path: String, message: String) -> Result<String, String> {
         return Err("提交消息不能为空".to_string());
     }
 
-    let output = Command::new("svn")
-        .args(["commit", &path, "-m", &message])
-        .output()
-        .map_err(|e| format!("执行 svn commit 失败: {}", e))?;
+    // 在 Windows 上使用 PowerShell 以获得更好的 Unicode 支持
+    #[cfg(target_os = "windows")]
+    {
+        let path_escaped = path.replace('"', "`\"");
+        let message_escaped = message.replace('"', "`\"");
 
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        // 解析提交摘要，例如 "Committed revision 12345"
-        let summary = stdout
-            .lines()
-            .find(|l| l.contains("Committed revision") || l.contains("提交的版本"))
-            .unwrap_or("提交成功");
-        Ok(summary.to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("提交失败: {}", stderr))
+        let ps_command = format!(
+            "svn commit \"{}\" -m \"{}\"",
+            path_escaped, message_escaped
+        );
+
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_command])
+            .output()
+            .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let summary = stdout
+                .lines()
+                .find(|l| l.contains("Committed revision") || l.contains("提交的版本"))
+                .unwrap_or("提交成功");
+            Ok(summary.to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("提交失败: {}", stderr))
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("svn")
+            .args(["commit", &path, "-m", &message])
+            .output()
+            .map_err(|e| format!("执行 svn commit 失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let summary = stdout
+                .lines()
+                .find(|l| l.contains("Committed revision") || l.contains("提交的版本"))
+                .unwrap_or("提交成功");
+            Ok(summary.to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("提交失败: {}", stderr))
+        }
     }
 }
 
@@ -921,17 +1153,44 @@ async fn svn_commit(path: String, message: String) -> Result<String, String> {
 async fn svn_diff(path: String) -> Result<String, String> {
     check_svn_installed()?;
 
-    let output = Command::new("svn")
-        .args(["diff", &path])
-        .output()
-        .map_err(|e| format!("执行 svn diff 失败: {}", e))?;
+    // 在 Windows 上使用 PowerShell 以获得更好的 Unicode 支持
+    #[cfg(target_os = "windows")]
+    {
+        let path_escaped = path.replace('"', "`\"");
 
-    let diff_text = String::from_utf8_lossy(&output.stdout).to_string();
+        let ps_command = format!(
+            "svn diff \"{}\"",
+            path_escaped
+        );
 
-    if diff_text.trim().is_empty() {
-        Ok("暂无变更".to_string())
-    } else {
-        Ok(diff_text)
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_command])
+            .output()
+            .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?;
+
+        let diff_text = String::from_utf8_lossy(&output.stdout).to_string();
+
+        if diff_text.trim().is_empty() {
+            Ok("暂无变更".to_string())
+        } else {
+            Ok(diff_text)
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("svn")
+            .args(["diff", &path])
+            .output()
+            .map_err(|e| format!("执行 svn diff 失败: {}", e))?;
+
+        let diff_text = String::from_utf8_lossy(&output.stdout).to_string();
+
+        if diff_text.trim().is_empty() {
+            Ok("暂无变更".to_string())
+        } else {
+            Ok(diff_text)
+        }
     }
 }
 
@@ -939,59 +1198,128 @@ async fn svn_diff(path: String) -> Result<String, String> {
 async fn test_svn_auth(path: String) -> Result<String, String> {
     check_svn_installed()?;
 
-    // 使用 svn info 测试连接
-    let output = Command::new("svn")
-        .args(["info", &path])
-        .output()
-        .map_err(|e| format!("执行 svn info 失败: {}", e))?;
+    // 在 Windows 上使用 PowerShell 以获得更好的 Unicode 支持
+    #[cfg(target_os = "windows")]
+    {
+        let path_escaped = path.replace('"', "`\"");
 
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let ps_command = format!(
+            "svn info \"{}\"",
+            path_escaped
+        );
 
-        // 解析仓库信息
-        let mut url = "未知".to_string();
-        let mut revision = "未知".to_string();
-        let mut repository_root = "未知".to_string();
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_command])
+            .output()
+            .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?;
 
-        for line in stdout.lines() {
-            if let Some(val) = line.strip_prefix("URL: ") {
-                url = val.to_string();
-            } else if let Some(val) = line.strip_prefix("Revision: ") {
-                revision = val.to_string();
-            } else if let Some(val) = line.strip_prefix("Repository Root: ") {
-                repository_root = val.to_string();
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // 解析仓库信息
+            let mut url = "未知".to_string();
+            let mut revision = "未知".to_string();
+            let mut repository_root = "未知".to_string();
+
+            for line in stdout.lines() {
+                if let Some(val) = line.strip_prefix("URL: ") {
+                    url = val.to_string();
+                } else if let Some(val) = line.strip_prefix("Revision: ") {
+                    revision = val.to_string();
+                } else if let Some(val) = line.strip_prefix("Repository Root: ") {
+                    repository_root = val.to_string();
+                }
             }
-        }
 
-        Ok(format!(
-            "✅ 认证测试成功！\n\n\
-            仓库 URL: {}\n\
-            当前版本: {}\n\
-            仓库根: {}\n\
-            您的 SVN 凭据配置正确，可以正常进行更新和提交操作。",
-            url, revision, repository_root
-        ))
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let error_msg = stderr.to_string();
-
-        if error_msg.contains("authorization") || error_msg.contains("authentication") || error_msg.contains("凭据") {
-            Err(format!(
-                "❌ 认证失败！\n\n\
-                问题: SVN 认证失败\n\n\
-                可能的原因:\n\
-                1. 用户名或密码错误\n\
-                2. 没有访问权限\n\
-                3. 凭据已过期\n\n\
-                解决方案:\n\
-                1. 重新输入凭据: svn commit --username <用户名>\n\
-                2. 或保存凭据: svn commit --username <用户名> --password <密码>\n\
-                3. 或清除已保存的凭据并重新输入\n\n\
-                详细错误: {}",
-                error_msg
+            Ok(format!(
+                "✅ 认证测试成功！\n\n\
+                仓库 URL: {}\n\
+                当前版本: {}\n\
+                仓库根: {}\n\
+                您的 SVN 凭据配置正确，可以正常进行更新和提交操作。",
+                url, revision, repository_root
             ))
         } else {
-            Err(format!("连接测试失败: {}", error_msg))
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let error_msg = stderr.to_string();
+
+            if error_msg.contains("authorization") || error_msg.contains("authentication") || error_msg.contains("凭据") {
+                Err(format!(
+                    "❌ 认证失败！\n\n\
+                    问题: SVN 认证失败\n\n\
+                    可能的原因:\n\
+                    1. 用户名或密码错误\n\
+                    2. 没有访问权限\n\
+                    3. 凭据已过期\n\n\
+                    解决方案:\n\
+                    1. 重新输入凭据: svn commit --username <用户名>\n\
+                    2. 或保存凭据: svn commit --username <用户名> --password <密码>\n\
+                    3. 或清除已保存的凭据并重新输入\n\n\
+                    详细错误: {}",
+                    error_msg
+                ))
+            } else {
+                Err(format!("连接测试失败: {}", error_msg))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // 使用 svn info 测试连接
+        let output = Command::new("svn")
+            .args(["info", &path])
+            .output()
+            .map_err(|e| format!("执行 svn info 失败: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // 解析仓库信息
+            let mut url = "未知".to_string();
+            let mut revision = "未知".to_string();
+            let mut repository_root = "未知".to_string();
+
+            for line in stdout.lines() {
+                if let Some(val) = line.strip_prefix("URL: ") {
+                    url = val.to_string();
+                } else if let Some(val) = line.strip_prefix("Revision: ") {
+                    revision = val.to_string();
+                } else if let Some(val) = line.strip_prefix("Repository Root: ") {
+                    repository_root = val.to_string();
+                }
+            }
+
+            Ok(format!(
+                "✅ 认证测试成功！\n\n\
+                仓库 URL: {}\n\
+                当前版本: {}\n\
+                仓库根: {}\n\
+                您的 SVN 凭据配置正确，可以正常进行更新和提交操作。",
+                url, revision, repository_root
+            ))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let error_msg = stderr.to_string();
+
+            if error_msg.contains("authorization") || error_msg.contains("authentication") || error_msg.contains("凭据") {
+                Err(format!(
+                    "❌ 认证失败！\n\n\
+                    问题: SVN 认证失败\n\n\
+                    可能的原因:\n\
+                    1. 用户名或密码错误\n\
+                    2. 没有访问权限\n\
+                    3. 凭据已过期\n\n\
+                    解决方案:\n\
+                    1. 重新输入凭据: svn commit --username <用户名>\n\
+                    2. 或保存凭据: svn commit --username <用户名> --password <密码>\n\
+                    3. 或清除已保存的凭据并重新输入\n\n\
+                    详细错误: {}",
+                    error_msg
+                ))
+            } else {
+                Err(format!("连接测试失败: {}", error_msg))
+            }
         }
     }
 }
@@ -1004,20 +1332,54 @@ async fn svn_add(path: String, files: Vec<String>) -> Result<String, String> {
         return Err("没有要添加的文件".to_string());
     }
 
-    let mut args = vec!["add".to_string()];
-    args.extend(files.clone());
-    args.push(path.clone());
+    // 在 Windows 上使用 PowerShell 以获得更好的 Unicode 支持
+    #[cfg(target_os = "windows")]
+    {
+        // 转义路径中的双引号
+        let path_escaped = path.replace('"', "`\"");
+        let files_escaped: Vec<String> = files.iter()
+            .map(|f| f.replace('"', "`\""))
+            .collect();
 
-    let output = Command::new("svn")
-        .args(&args)
-        .output()
-        .map_err(|e| format!("执行 svn add 失败: {}", e))?;
+        // 构建 PowerShell 命令
+        let mut ps_args = vec!["add".to_string()];
+        for file in &files_escaped {
+            ps_args.push(format!("\"{}\"", file));
+        }
+        ps_args.push(format!("\"{}\"", path_escaped));
 
-    if output.status.success() {
-        Ok(format!("成功添加 {} 个文件到版本控制", files.len()))
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("添加文件失败: {}", stderr))
+        let ps_command = ps_args.join(" ");
+
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_command])
+            .output()
+            .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?;
+
+        if output.status.success() {
+            Ok(format!("成功添加 {} 个文件到版本控制", files.len()))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("添加文件失败: {}", stderr))
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut args = vec!["add".to_string()];
+        args.extend(files.clone());
+        args.push(path.clone());
+
+        let output = Command::new("svn")
+            .args(&args)
+            .output()
+            .map_err(|e| format!("执行 svn add 失败: {}", e))?;
+
+        if output.status.success() {
+            Ok(format!("成功添加 {} 个文件到版本控制", files.len()))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("添加文件失败: {}", stderr))
+        }
     }
 }
 
@@ -1025,28 +1387,77 @@ async fn svn_add(path: String, files: Vec<String>) -> Result<String, String> {
 async fn svn_revert(path: String, files: Option<Vec<String>>) -> Result<String, String> {
     check_svn_installed()?;
 
-    let output = if let Some(file_list) = files {
-        if file_list.is_empty() {
-            return Err("没有要还原的文件".to_string());
-        }
-        let mut args = vec!["revert".to_string()];
-        args.extend(file_list);
-        Command::new("svn")
-            .args(&args)
-            .output()
-            .map_err(|e| format!("执行 svn revert 失败: {}", e))?
-    } else {
-        Command::new("svn")
-            .args(["revert", "-R", &path])
-            .output()
-            .map_err(|e| format!("执行 svn revert 失败: {}", e))?
-    };
+    // 在 Windows 上使用 PowerShell 以获得更好的 Unicode 支持
+    #[cfg(target_os = "windows")]
+    {
+        let output = if let Some(file_list) = files {
+            if file_list.is_empty() {
+                return Err("没有要还原的文件".to_string());
+            }
 
-    if output.status.success() {
-        Ok("还原成功".to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("还原失败: {}", stderr))
+            // 转义文件路径中的双引号
+            let files_escaped: Vec<String> = file_list.iter()
+                .map(|f| f.replace('"', "`\""))
+                .collect();
+
+            // 构建 PowerShell 命令
+            let mut ps_args = vec!["revert".to_string()];
+            for file in &files_escaped {
+                ps_args.push(format!("\"{}\"", file));
+            }
+
+            let ps_command = ps_args.join(" ");
+
+            Command::new("powershell")
+                .args(["-NoProfile", "-Command", &ps_command])
+                .output()
+                .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?
+        } else {
+            let path_escaped = path.replace('"', "`\"");
+            let ps_command = format!(
+                "svn revert -R \"{}\"",
+                path_escaped
+            );
+
+            Command::new("powershell")
+                .args(["-NoProfile", "-Command", &ps_command])
+                .output()
+                .map_err(|e| format!("执行 PowerShell 命令失败: {}", e))?
+        };
+
+        if output.status.success() {
+            Ok("还原成功".to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("还原失败: {}", stderr))
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = if let Some(file_list) = files {
+            if file_list.is_empty() {
+                return Err("没有要还原的文件".to_string());
+            }
+            let mut args = vec!["revert".to_string()];
+            args.extend(file_list);
+            Command::new("svn")
+                .args(&args)
+                .output()
+                .map_err(|e| format!("执行 svn revert 失败: {}", e))?
+        } else {
+            Command::new("svn")
+                .args(["revert", "-R", &path])
+                .output()
+                .map_err(|e| format!("执行 svn revert 失败: {}", e))?
+        };
+
+        if output.status.success() {
+            Ok("还原成功".to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("还原失败: {}", stderr))
+        }
     }
 }
 

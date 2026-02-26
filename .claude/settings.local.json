@@ -39,7 +39,8 @@
       "Bash(del /d/Projects/pm/nul)",
       "Bash(pnpm tauri build)",
       "Bash(pnpm tauri build --no-bundle)",
-      "Bash(pnpm build)"
+      "Bash(pnpm build)",
+      "Bash(rustc --version)"
     ]
   }
 }
