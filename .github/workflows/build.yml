@@ -82,10 +82,9 @@ jobs:
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
         with:
-          target: ${{ matrix.target }}
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.platform == 'ubuntu-22.04' && '--bundles appimage,deb' || '' }}
+          args: ${{ matrix.platform == 'ubuntu-22.04' && format('--target {0} --bundles appimage,deb', matrix.target) || format('--target {0}', matrix.target) }}
 
       # 调试输出（防止路径错误）
       - name: Debug bundle directory
