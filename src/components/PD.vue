@@ -320,7 +320,7 @@
                         </label>
                         <InputText
                             v-model="cloneUrl"
-                            placeholder="例如：https://github.com/user/repo.git"
+                            placeholder="例如：https://github.com/user/repo.git 或 http://server/svn/project"
                             :class="{ 'p-invalid': !cloneUrl && formSubmitted }"
                         />
                         <small
@@ -329,11 +329,69 @@
                             >请输入仓库 URL</small
                         >
                         <small class="p-hint" v-if="cloneUrl && !newRepository.vcs">
-                            支持 Git (.git) 和 SVN (svn://) URL
+                            支持 Git (.git) 和 SVN (svn:// 或 http://.../svn/...) URL
                         </small>
                         <small class="p-success" v-if="newRepository.vcs">
                             检测到 {{ newRepository.vcs.toUpperCase() }} 仓库
                         </small>
+                        <!-- SVN 中文 URL 提示 -->
+                        <Message v-if="cloneUrl && newRepository.vcs === 'svn' && hasChineseInUrl(cloneUrl)"
+                            severity="warn"
+                            :closable="false"
+                            class="mt-2"
+                        >
+                            <div class="flex flex-column gap-2">
+                                <span class="font-semibold">
+                                    <i class="pi pi-exclamation-triangle mr-2"></i>
+                                    检测到 SVN URL 包含中文字符
+                                </span>
+                                <span class="text-sm">
+                                    由于命令行工具的限制，应用内可能无法直接 checkout 包含中文的 SVN URL。
+                                </span>
+                                <div class="flex flex-column gap-2 mt-2">
+                                    <span class="font-semibold text-sm">推荐方案：</span>
+                                    <ol class="text-sm m-0 pl-4 flex flex-column gap-2">
+                                        <li>
+                                            <strong>使用 TortoiseSVN：</strong>
+                                            <div class="mt-1 text-xs opacity-80">
+                                                右键点击文件夹 → SVN Checkout... → 粘贴 URL
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>使用命令行：</strong>
+                                            <div class="mt-1 p-2 bg-surface-100 dark:bg-surface-800 rounded text-xs font-mono">
+                                                chcp 65001<br>
+                                                svn checkout "{{ cloneUrl }}" "目标路径"
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>然后在应用中添加：</strong>
+                                            <div class="mt-1 text-xs opacity-80">
+                                                切换到"本地路径"模式，选择已 checkout 的目录
+                                            </div>
+                                        </li>
+                                    </ol>
+                                </div>
+                                <div class="flex gap-2 mt-2">
+                                    <Button
+                                        label="复制命令"
+                                        size="small"
+                                        severity="secondary"
+                                        outlined
+                                        @click="copySvnCommand"
+                                        v-tooltip.top="'复制到剪贴板'"
+                                    />
+                                    <Button
+                                        label="切换到本地路径"
+                                        size="small"
+                                        severity="help"
+                                        outlined
+                                        @click="addMode = 'local'"
+                                        v-tooltip.top="'直接添加已 checkout 的目录'"
+                                    />
+                                </div>
+                            </div>
+                        </Message>
                     </div>
 
                     <div class="form-field">
@@ -381,6 +439,32 @@
                 />
             </div>
         </form>
+    </Dialog>
+
+    <!-- 克隆进度对话框 -->
+    <Dialog
+        v-model:visible="cloneProgress.show"
+        modal
+        header="正在克隆仓库"
+        :style="{ width: '500px' }"
+        :dismissableMask="false"
+        :closeOnEscape="false"
+        :closable="false"
+    >
+        <div class="clone-progress-content">
+            <ProgressBar mode="indeterminate" style="height: 6px; margin-bottom: 1rem;" />
+            <div class="progress-info">
+                <p class="progress-status">{{ cloneProgress.status }}</p>
+                <p class="progress-details" v-if="cloneProgress.details">
+                    <i class="pi pi-file"></i>
+                    当前文件: {{ cloneProgress.details }}
+                </p>
+            </div>
+            <div class="progress-hint">
+                <i class="pi pi-info-circle"></i>
+                <span>克隆大型仓库可能需要几分钟时间，请耐心等待...</span>
+            </div>
+        </div>
     </Dialog>
 
     <!-- 编辑仓库名称对话框 -->
@@ -545,6 +629,11 @@ const addMode = ref<'local' | 'clone'>('local')
 const cloneUrl = ref('')
 const cloneTargetPath = ref('')
 const isCloning = ref(false)
+const cloneProgress = ref({
+    show: false,
+    status: '',
+    details: '',
+})
 
 const pjInfo = ref({
     name: '',
@@ -629,6 +718,14 @@ async function onCreateNewRepository() {
 
         isCloning.value = true
 
+        // 显示进度对话框
+        const vcsType = newRepository.value.vcs === 'git' ? 'Git' : 'SVN'
+        cloneProgress.value = {
+            show: true,
+            status: `正在${vcsType === 'Git' ? '克隆' : '检出'}仓库...`,
+            details: `从 ${cloneUrl.value} ${vcsType === 'Git' ? '克隆' : '检出'}到 ${cloneTargetPath.value}`,
+        }
+
         try {
             // 执行克隆
             if (newRepository.value.vcs === 'git') {
@@ -640,6 +737,9 @@ async function onCreateNewRepository() {
             }
 
             // 克隆成功，保存到数据库
+            cloneProgress.value.status = '保存仓库信息...'
+            cloneProgress.value.details = '正在将仓库添加到项目...'
+
             const repoPath = cloneTargetPath.value
             const res = await db.execute(
                 'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
@@ -684,6 +784,7 @@ async function onCreateNewRepository() {
             })
         } finally {
             isCloning.value = false
+            cloneProgress.value.show = false
         }
         return
     }
@@ -783,19 +884,29 @@ async function selectCloneTarget() {
 // 从 URL 检测 VCS 类型
 function detectVcsFromUrl(url: string): string {
     const lowerUrl = url.toLowerCase()
+
+    // SVN 检测（优先检测，因为有些 SVN URL 使用 HTTP 协议）
+    // 1. svn:// 或 svn+ssh:// 等协议
     if (lowerUrl.startsWith('svn://') || lowerUrl.startsWith('svn+')) {
         return 'svn'
     }
+    // 2. HTTP/HTTPS 协议且包含 /svn/ 路径
+    if ((lowerUrl.startsWith('http://') || lowerUrl.startsWith('https://')) && lowerUrl.includes('/svn/')) {
+        return 'svn'
+    }
+
     // Git 支持多种协议：https, git@, git://, ssh://
     if (lowerUrl.includes('.git') ||
         lowerUrl.startsWith('git@') ||
         lowerUrl.startsWith('git://') ||
+        lowerUrl.startsWith('ssh://git@') ||
         lowerUrl.startsWith('https://github.com') ||
         lowerUrl.startsWith('https://gitlab.com') ||
         lowerUrl.startsWith('https://gitee.com') ||
         lowerUrl.startsWith('https://bitbucket.org')) {
         return 'git'
     }
+
     return ''
 }
 
@@ -815,6 +926,54 @@ function extractRepoNameFromUrl(url: string): string {
         return lastPart || ''
     } catch {
         return ''
+    }
+}
+
+// 检测 URL 是否包含中文字符
+function hasChineseInUrl(url: string): boolean {
+    // 匹配中文字符（包括中文标点）
+    return /[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/.test(url)
+}
+
+// 复制 SVN checkout 命令到剪贴板
+async function copySvnCommand() {
+    const command = `chcp 65001\nsvn checkout "${cloneUrl.value}" "目标路径"`
+
+    try {
+        await navigator.clipboard.writeText(command)
+        toast.add({
+            severity: 'success',
+            summary: '复制成功',
+            detail: '命令已复制到剪贴板，请在命令行中粘贴执行',
+            life: 3000
+        })
+    } catch (error) {
+        // 如果 clipboard API 不可用，使用传统方法
+        const textarea = document.createElement('textarea')
+        textarea.value = command
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+
+        try {
+            document.execCommand('copy')
+            toast.add({
+                severity: 'success',
+                summary: '复制成功',
+                detail: '命令已复制到剪贴板，请在命令行中粘贴执行',
+                life: 3000
+            })
+        } catch (err) {
+            toast.add({
+                severity: 'error',
+                summary: '复制失败',
+                detail: '请手动复制命令',
+                life: 3000
+            })
+        }
+
+        document.body.removeChild(textarea)
     }
 }
 
@@ -1749,6 +1908,51 @@ watch(
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* ==================== 克隆进度对话框 ==================== */
+.clone-progress-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 0.5rem 0;
+}
+
+.progress-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.progress-status {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.progress-details {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-color-secondary);
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+.progress-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--surface-50);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    color: var(--text-color-secondary);
+}
+
+.progress-hint i {
+    color: var(--primary-color);
+    font-size: 1rem;
 }
 
 /* ==================== 响应式 ==================== */
