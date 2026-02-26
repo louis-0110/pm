@@ -790,37 +790,57 @@ async function onCreateNewRepository() {
     }
 
     // 本地路径模式
-    const res = await db.execute(
-        'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
-        [
-            newRepository.value.name,
-            newRepository.value.path,
-            newRepository.value.url || null,
-            newRepository.value.project_id,
-            newRepository.value.vcs,
-        ],
-    )
-    if (res.rowsAffected < 1) {
+    if (!newRepository.value.path) {
+        return
+    }
+
+    try {
+        // 确保 vcs 有有效值（数据库约束要求 'git', 'svn' 或 ''）
+        const vcsValue = newRepository.value.vcs || ''
+        // 确保 project_id 是整数
+        const projectId = Number(newRepository.value.project_id)
+
+        const res = await db.execute(
+            'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
+            [
+                newRepository.value.name,
+                newRepository.value.path,
+                newRepository.value.url || null,
+                projectId,
+                vcsValue,
+            ],
+        )
+        if (res.rowsAffected < 1) {
+            toast.add({
+                severity: 'error',
+                summary: '添加失败',
+                detail: '该仓库可能已存在',
+                life: 3000,
+            })
+            return
+        }
+        toast.add({
+            severity: 'success',
+            summary: '添加成功',
+            detail: `仓库 "${newRepository.value.name}" 已添加`,
+            life: 3000,
+        })
+        isShowRepository.value = false
+        // 手动重新获取仓库列表，而不是触发 watchEffect
+        if (projectInfo.value) {
+            await getRepositories(projectInfo.value.id)
+            // 通知其他组件数据已更新
+            eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
+        }
+    } catch (error) {
+        console.error('添加仓库失败:', error)
+        const errorMsg = error instanceof Error ? error.message : String(error)
         toast.add({
             severity: 'error',
             summary: '添加失败',
-            detail: '该仓库可能已存在',
-            life: 3000,
+            detail: errorMsg,
+            life: 5000,
         })
-        return
-    }
-    toast.add({
-        severity: 'success',
-        summary: '添加成功',
-        detail: `仓库 "${newRepository.value.name}" 已添加`,
-        life: 3000,
-    })
-    isShowRepository.value = false
-    // 手动重新获取仓库列表，而不是触发 watchEffect
-    if (projectInfo.value) {
-        await getRepositories(projectInfo.value.id)
-        // 通知其他组件数据已更新
-        eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
     }
 }
 
@@ -993,6 +1013,34 @@ watch(cloneUrl, (newUrl) => {
     } else {
         newRepository.value.vcs = ''
     }
+})
+
+// 监听 addMode 切换，重置表单数据避免污染
+watch(addMode, (newMode, oldMode) => {
+    // 首次初始化时不处理
+    if (oldMode === undefined) return
+
+    // 保存当前名称（用户可能已经输入了）
+    const currentName = newRepository.value.name
+
+    if (newMode === 'local') {
+        // 切换到本地路径模式：清空克隆相关字段
+        cloneUrl.value = ''
+        cloneTargetPath.value = ''
+        newRepository.value.url = ''
+        newRepository.value.vcs = ''
+        // 保留名称和路径
+        newRepository.value.name = currentName
+    } else if (newMode === 'clone') {
+        // 切换到 URL 克隆模式：清空本地路径相关字段
+        newRepository.value.path = ''
+        newRepository.value.vcs = ''
+        // 保留名称
+        newRepository.value.name = currentName
+    }
+
+    // 重置表单验证状态
+    formSubmitted.value = false
 })
 
 const deleteRepository = async (item: Repository) => {
