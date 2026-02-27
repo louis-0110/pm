@@ -79,7 +79,7 @@ jobs:
         with:
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.platform == 'ubuntu-22.04' && format('--target {0} --bundles appimage,deb', matrix.target) || format('--target {0}', matrix.target) }}
+          args: --target ${{ matrix.target }} ${{ matrix.platform == 'ubuntu-22.04' && '--bundles appimage,deb' || '' }}
 
       # 调试输出（防止路径错误）
       - name: Debug bundle directory
