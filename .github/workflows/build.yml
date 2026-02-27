@@ -20,13 +20,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macOS: 使用 Universal Binary 同时支持 Apple Silicon 和 Intel
           - platform: macos-latest
-            target: aarch64-apple-darwin
-            name: macOS-AppleSilicon
-
-          - platform: macos-latest
-            target: x86_64-apple-darwin
-            name: macOS-Intel
+            target: universal-apple-darwin
+            name: macOS
 
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -79,7 +76,7 @@ jobs:
         with:
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.platform == 'ubuntu-22.04' && format('--target {0} --bundles appimage,deb', matrix.target) || format('--target {0}', matrix.target) }}
+          args: ${{ matrix.name == 'Linux' && '--target x86_64-unknown-linux-gnu --bundles appimage,deb' || (matrix.name == 'macOS' && '--target universal-apple-darwin' || '--target x86_64-pc-windows-msvc') }}
 
       # 调试输出（防止路径错误）
       - name: Debug bundle directory

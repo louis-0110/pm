@@ -703,6 +703,80 @@ async function handleRepositoryStatusRefresh(repoId: number | string) {
     }
 }
 
+/**
+ * VCS 配置映射
+ */
+const VCS_CONFIG = {
+    git: { name: 'Git', action: '克隆', api: gitApi },
+    svn: { name: 'SVN', action: '检出', api: svnApi },
+} as const
+
+/**
+ * 获取错误信息
+ */
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message
+    return String(error)
+}
+
+/**
+ * 保存仓库到数据库
+ */
+async function saveRepository(params: {
+    name: string
+    path: string
+    url?: string
+    project_id: string | number | string[]
+    vcs: string
+}): Promise<boolean> {
+    const res = await db.execute(
+        'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5)',
+        [
+            params.name,
+            params.path,
+            params.url || null,
+            Number(Array.isArray(params.project_id) ? params.project_id[0] : params.project_id),
+            params.vcs || '',
+        ],
+    )
+    return res.rowsAffected > 0
+}
+
+/**
+ * 添加仓库成功后的处理
+ */
+async function onRepositoryAdded(repoName: string, isClone = false) {
+    isShowRepository.value = false
+
+    if (projectInfo.value) {
+        await getRepositories(projectInfo.value.id)
+        eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
+    }
+
+    toast.add({
+        severity: 'success',
+        summary: isClone ? '克隆成功' : '添加成功',
+        detail: `仓库 "${repoName}" ${isClone ? '已克隆并' : ''}添加`,
+        life: 3000,
+    })
+}
+
+/**
+ * 执行克隆或检出操作
+ */
+async function executeClone(vcs: string, url: string, targetPath: string) {
+    const config = VCS_CONFIG[vcs as keyof typeof VCS_CONFIG]
+    if (!config) {
+        throw new Error('无法识别的仓库类型')
+    }
+
+    if (vcs === 'git') {
+        await gitApi.clone(url, targetPath)
+    } else {
+        await svnApi.checkout(url, targetPath)
+    }
+}
+
 async function onCreateNewRepository() {
     formSubmitted.value = true
 
@@ -716,70 +790,58 @@ async function onCreateNewRepository() {
             return
         }
 
-        isCloning.value = true
+        const vcs = newRepository.value.vcs
+        const config = VCS_CONFIG[vcs as keyof typeof VCS_CONFIG]
 
-        // 显示进度对话框
-        const vcsType = newRepository.value.vcs === 'git' ? 'Git' : 'SVN'
+        if (!config) {
+            toast.add({
+                severity: 'error',
+                summary: '错误',
+                detail: '无法识别的仓库类型',
+                life: 3000,
+            })
+            return
+        }
+
+        isCloning.value = true
         cloneProgress.value = {
             show: true,
-            status: `正在${vcsType === 'Git' ? '克隆' : '检出'}仓库...`,
-            details: `从 ${cloneUrl.value} ${vcsType === 'Git' ? '克隆' : '检出'}到 ${cloneTargetPath.value}`,
+            status: `正在${config.action}仓库...`,
+            details: `从 ${cloneUrl.value} ${config.action}到 ${cloneTargetPath.value}`,
         }
 
         try {
             // 执行克隆
-            if (newRepository.value.vcs === 'git') {
-                await gitApi.clone(cloneUrl.value, cloneTargetPath.value)
-            } else if (newRepository.value.vcs === 'svn') {
-                await svnApi.checkout(cloneUrl.value, cloneTargetPath.value)
-            } else {
-                throw new Error('无法识别的仓库类型')
-            }
+            await executeClone(vcs, cloneUrl.value, cloneTargetPath.value)
 
-            // 克隆成功，保存到数据库
+            // 保存到数据库
             cloneProgress.value.status = '保存仓库信息...'
             cloneProgress.value.details = '正在将仓库添加到项目...'
 
-            const repoPath = cloneTargetPath.value
-            const res = await db.execute(
-                'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
-                [
-                    newRepository.value.name,
-                    repoPath,
-                    cloneUrl.value,
-                    newRepository.value.project_id,
-                    newRepository.value.vcs,
-                ],
-            )
+            const saved = await saveRepository({
+                name: newRepository.value.name,
+                path: cloneTargetPath.value,
+                url: cloneUrl.value,
+                project_id: newRepository.value.project_id,
+                vcs: newRepository.value.vcs,
+            })
 
-            if (res.rowsAffected < 1) {
+            if (!saved) {
                 toast.add({
                     severity: 'warn',
                     summary: '克隆成功但添加失败',
                     detail: '仓库已克隆但可能已存在于列表中',
                     life: 3000,
                 })
-            } else {
-                toast.add({
-                    severity: 'success',
-                    summary: '克隆成功',
-                    detail: `仓库 "${newRepository.value.name}" 已克隆并添加`,
-                    life: 3000,
-                })
+                return
             }
 
-            isShowRepository.value = false
-
-            // 刷新仓库列表
-            if (projectInfo.value) {
-                await getRepositories(projectInfo.value.id)
-                eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
-            }
+            await onRepositoryAdded(newRepository.value.name, true)
         } catch (error) {
             toast.add({
                 severity: 'error',
                 summary: '克隆失败',
-                detail: error as string,
+                detail: getErrorMessage(error),
                 life: 5000,
             })
         } finally {
@@ -795,22 +857,15 @@ async function onCreateNewRepository() {
     }
 
     try {
-        // 确保 vcs 有有效值（数据库约束要求 'git', 'svn' 或 ''）
-        const vcsValue = newRepository.value.vcs || ''
-        // 确保 project_id 是整数
-        const projectId = Number(newRepository.value.project_id)
+        const saved = await saveRepository({
+            name: newRepository.value.name,
+            path: newRepository.value.path,
+            url: newRepository.value.url || '',
+            project_id: newRepository.value.project_id,
+            vcs: newRepository.value.vcs || '',
+        })
 
-        const res = await db.execute(
-            'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
-            [
-                newRepository.value.name,
-                newRepository.value.path,
-                newRepository.value.url || null,
-                projectId,
-                vcsValue,
-            ],
-        )
-        if (res.rowsAffected < 1) {
+        if (!saved) {
             toast.add({
                 severity: 'error',
                 summary: '添加失败',
@@ -819,26 +874,14 @@ async function onCreateNewRepository() {
             })
             return
         }
-        toast.add({
-            severity: 'success',
-            summary: '添加成功',
-            detail: `仓库 "${newRepository.value.name}" 已添加`,
-            life: 3000,
-        })
-        isShowRepository.value = false
-        // 手动重新获取仓库列表，而不是触发 watchEffect
-        if (projectInfo.value) {
-            await getRepositories(projectInfo.value.id)
-            // 通知其他组件数据已更新
-            eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
-        }
+
+        await onRepositoryAdded(newRepository.value.name, false)
     } catch (error) {
         console.error('添加仓库失败:', error)
-        const errorMsg = error instanceof Error ? error.message : String(error)
         toast.add({
             severity: 'error',
             summary: '添加失败',
-            detail: errorMsg,
+            detail: getErrorMessage(error),
             life: 5000,
         })
     }
@@ -863,6 +906,23 @@ function addRepository() {
     isShowRepository.value = true
 }
 
+/**
+ * 检测路径的 VCS 类型
+ */
+async function detectVcsFromPath(path: string): Promise<string> {
+    try {
+        const entries = await readDir(path)
+        const gitDir = entries.find(e => e.name === '.git')
+        if (gitDir) return 'git'
+
+        const svnDir = entries.find(e => e.name === '.svn')
+        if (svnDir) return 'svn'
+    } catch {
+        // 如果读取失败，返回空字符串
+    }
+    return ''
+}
+
 // 选择本地仓库路径
 async function selectLocalPath() {
     const result = await open({
@@ -871,21 +931,8 @@ async function selectLocalPath() {
     })
 
     if (result) {
-        // 检测版本管理工具
-        let vcs = ''
-        const entries = await readDir(result)
-        for (const entry of entries) {
-            if (entry.name == '.git') {
-                vcs = 'git'
-                break
-            } else if (entry.name == '.svn') {
-                vcs = 'svn'
-                break
-            }
-        }
-
         newRepository.value.path = result
-        newRepository.value.vcs = vcs
+        newRepository.value.vcs = await detectVcsFromPath(result)
     }
 }
 
@@ -901,49 +948,71 @@ async function selectCloneTarget() {
     }
 }
 
-// 从 URL 检测 VCS 类型
+/**
+ * VCS URL 检测规则
+ */
+const SVN_PATTERNS = [
+    /^svn:\/\//i,           // svn://
+    /^svn\+/i,               // svn+ssh://, svn+https://
+    /^https?:\/\//i,         // http:// or https://
+]
+
+const GIT_PATTERNS = [
+    /\.git$/i,                         // .git 后缀
+    /^git@/i,                          // git@ 协议
+    /^git:\/\//i,                      // git:// 协议
+    /^ssh:\/\/git@/i,                  // ssh://git@ 协议
+    /^https:\/\/(github|gitlab|gitee|bitbucket)\.com/i,  // 常见 Git 平台
+]
+
+/**
+ * 从 URL 检测 VCS 类型
+ */
 function detectVcsFromUrl(url: string): string {
+    if (!url) return ''
+
     const lowerUrl = url.toLowerCase()
 
-    // SVN 检测（优先检测，因为有些 SVN URL 使用 HTTP 协议）
-    // 1. svn:// 或 svn+ssh:// 等协议
-    if (lowerUrl.startsWith('svn://') || lowerUrl.startsWith('svn+')) {
-        return 'svn'
-    }
-    // 2. HTTP/HTTPS 协议且包含 /svn/ 路径
-    if ((lowerUrl.startsWith('http://') || lowerUrl.startsWith('https://')) && lowerUrl.includes('/svn/')) {
-        return 'svn'
+    // 优先检测 SVN（因为 SVN 也使用 HTTP/HTTPS 协议）
+    if (SVN_PATTERNS.some(pattern => pattern.test(url))) {
+        // 如果是 HTTP/HTTPS，需要进一步检查是否包含 /svn/ 路径
+        if (/^https?:\/\//i.test(url) && !lowerUrl.includes('/svn/')) {
+            // HTTP/HTTPS 但不包含 /svn/，继续检查 Git
+        } else {
+            return 'svn'
+        }
     }
 
-    // Git 支持多种协议：https, git@, git://, ssh://
-    if (lowerUrl.includes('.git') ||
-        lowerUrl.startsWith('git@') ||
-        lowerUrl.startsWith('git://') ||
-        lowerUrl.startsWith('ssh://git@') ||
-        lowerUrl.startsWith('https://github.com') ||
-        lowerUrl.startsWith('https://gitlab.com') ||
-        lowerUrl.startsWith('https://gitee.com') ||
-        lowerUrl.startsWith('https://bitbucket.org')) {
+    // 检测 Git
+    if (GIT_PATTERNS.some(pattern => pattern.test(url))) {
         return 'git'
     }
 
     return ''
 }
 
-// 从 URL 提取仓库名称
+/**
+ * 从 URL 提取仓库名称
+ */
 function extractRepoNameFromUrl(url: string): string {
+    if (!url) return ''
+
     try {
-        // 移除 .git 后缀
-        let cleanUrl = url.replace(/\.git$/, '')
+        // 移除末尾的斜杠和 .git 后缀
+        let cleanUrl = url.replace(/\/+$/, '').replace(/\.git$/, '')
+
+        // 处理 git@user:repo 格式
+        if (cleanUrl.includes(':')) {
+            const parts = cleanUrl.split(':')
+            cleanUrl = parts[parts.length - 1]
+        }
+
         // 提取最后一段路径
         const parts = cleanUrl.split('/')
-        const lastPart = parts[parts.length - 1]
-        // 如果是 git@ 格式，需要处理
-        if (lastPart.includes(':')) {
-            const colonParts = lastPart.split(':')
-            return colonParts[colonParts.length - 1]
-        }
-        return lastPart || ''
+        const repoName = parts[parts.length - 1]
+
+        // 移除 URL 参数（如 ?query=params）
+        return repoName?.split('?')[0] || ''
     } catch {
         return ''
     }
