@@ -32,11 +32,11 @@
         <!-- 项目列表 -->
         <div class="sidebar-content">
             <div
-                v-if="pList.length > 0"
+                v-if="projectCount > 0"
                 class="project-list"
             >
                 <div
-                    v-for="item in pList"
+                    v-for="item in projectList"
                     :key="item.id"
                     :class="['project-item', { active: item.id + '' === $route.params.id }]"
                     @click="openProject(item)"
@@ -45,8 +45,8 @@
                         <div class="project-icon-wrapper">
                             <i class="pi pi-folder"></i>
                             <Badge
-                                v-if="getRepositoryCount(item.id)"
-                                :value="getRepositoryCount(item.id)"
+                                v-if="project.getRepositoryCount(item.id)"
+                                :value="project.getRepositoryCount(item.id)"
                             />
                         </div>
                         <div class="project-info">
@@ -106,7 +106,7 @@
             <div class="stats">
                 <span class="stats-item">
                     <i class="pi pi-folder"></i>
-                    {{ pList.length }} 个项目
+                    {{ projectCount }} 个项目
                 </span>
             </div>
         </div>
@@ -114,7 +114,7 @@
 
     <!-- 新建项目对话框 -->
     <Dialog
-        v-model:visible="showModal"
+        v-model:visible="formDialog.visible"
         modal
         header="新建项目"
         :style="{ width: '500px' }"
@@ -143,14 +143,14 @@
                     </label>
                     <InputText
                         id="projectName"
-                        v-model="model.projectName"
+                        v-model="formDialog.formData.projectName"
                         placeholder="例如：前端项目、后端 API"
-                        :class="{ 'p-invalid': !model.projectName && formSubmitted }"
+                        :class="{ 'p-invalid': !formDialog.formData.projectName && formDialog.submitted }"
                     />
                     <small
                         class="p-error"
-                        v-if="!model.projectName && formSubmitted"
-                        >请输入项目名称</small
+                        v-if="!formDialog.formData.projectName && formDialog.submitted"
+                        >{{ MESSAGES.PROJECT.NAME_REQUIRED }}</small
                     >
                 </div>
 
@@ -162,7 +162,7 @@
                     </label>
                     <Textarea
                         id="description"
-                        v-model="model.description"
+                        v-model="formDialog.formData.description"
                         placeholder="简要描述这个项目的用途和内容..."
                         rows="3"
                         auto-resize
@@ -175,7 +175,7 @@
                     label="取消"
                     severity="secondary"
                     text
-                    @click="showModal = false"
+                    @click="formDialog.closeAndReset()"
                 />
                 <Button
                     type="submit"
@@ -189,7 +189,7 @@
 
     <!-- 删除确认对话框 -->
     <Dialog
-        v-model:visible="showDeleteConfirm"
+        v-model:visible="deleteDialog.visible"
         modal
         header="确认删除"
         :style="{ width: '450px' }"
@@ -216,7 +216,7 @@
                 label="取消"
                 severity="secondary"
                 text
-                @click="showDeleteConfirm = false"
+                @click="deleteDialog.close()"
             />
             <Button
                 label="确认删除"
@@ -229,226 +229,111 @@
 </template>
 
 <script setup lang="ts">
-import dbFn from '@/db'
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useToast } from 'primevue/usetoast'
-import { formatDate, debounce } from '@/utils'
+import { useProject } from '@/composables'
+import { useDialog, useFormDialog } from '@/composables/useDialog'
+import { MESSAGES } from '@/constants/messages'
 import { eventBus, Events } from '@/utils/eventBus'
+import { formatDate, debounce } from '@/utils'
 import type { Project } from '@/types'
 
-const db = await dbFn
-const toast = useToast()
 const router = useRouter()
+const project = useProject()
 
-const showModal = ref(false)
-const showDeleteConfirm = ref(false)
-const formSubmitted = ref(false)
-const repositoryCounts = ref<Record<number, number>>({})
+// 解构出 ref，方便在模板中使用
+const { projects: projectList } = project
 
-// 防止重复打开的标志
-let isOpeningDialog = false
+// 调试：添加计算属性来监控项目数量
+const projectCount = computed(() => projectList.value.length)
+
+// 对话框管理
+const formDialog = useFormDialog<{
+    projectName: string
+    description: string
+}>()
+const deleteDialog = useDialog()
+
+// 搜索关键词
+const search = ref('')
 
 // 待删除的项目
 const projectToDelete = ref<Project | null>(null)
 
-const pList = ref<Project[]>([])
-
-const model = ref({
-    projectName: '',
-    description: '',
-})
-
-getProjectList()
+// 初始化加载项目列表
+project.loadProjects()
 
 // 监听其他组件的数据变化请求
 onMounted(() => {
-    // 监听项目和仓库变化，刷新项目列表（包含仓库数量）
-    eventBus.on(Events.REFRESH_PROJECTS, getProjectList)
-    eventBus.on(Events.PROJECT_CREATED, getProjectList)
-    eventBus.on(Events.PROJECT_DELETED, getProjectList)
-    eventBus.on(Events.REPOSITORY_ADDED, getProjectList)
-    eventBus.on(Events.REPOSITORY_DELETED, getProjectList)
+    eventBus.on(Events.REFRESH_PROJECTS, project.loadProjects)
+    eventBus.on(Events.PROJECT_CREATED, project.loadProjects)
+    eventBus.on(Events.PROJECT_DELETED, project.loadProjects)
+    eventBus.on(Events.REPOSITORY_ADDED, project.loadProjects)
+    eventBus.on(Events.REPOSITORY_DELETED, project.loadProjects)
 })
 
 onUnmounted(() => {
-    // 清理所有事件监听
-    eventBus.off(Events.REFRESH_PROJECTS, getProjectList)
-    eventBus.off(Events.PROJECT_CREATED, getProjectList)
-    eventBus.off(Events.PROJECT_DELETED, getProjectList)
-    eventBus.off(Events.REPOSITORY_ADDED, getProjectList)
-    eventBus.off(Events.REPOSITORY_DELETED, getProjectList)
+    eventBus.off(Events.REFRESH_PROJECTS, project.loadProjects)
+    eventBus.off(Events.PROJECT_CREATED, project.loadProjects)
+    eventBus.off(Events.PROJECT_DELETED, project.loadProjects)
+    eventBus.off(Events.REPOSITORY_ADDED, project.loadProjects)
+    eventBus.off(Events.REPOSITORY_DELETED, project.loadProjects)
 })
 
 // 打开新建项目 Dialog
 function openNewProjectDialog() {
-    // 防止重复打开
-    if (isOpeningDialog) return
-
-    isOpeningDialog = true
-
-    // 重置表单
-    model.value.projectName = ''
-    model.value.description = ''
-    formSubmitted.value = false
-
-    // 使用 nextTick 确保数据更新后再打开 Dialog
-    nextTick(() => {
-        showModal.value = true
-        isOpeningDialog = false
+    formDialog.openWithReset({
+        projectName: '',
+        description: ''
     })
 }
 
-async function getProjectList() {
-    try {
-        const projects = await db.select<Project[]>('SELECT * FROM projects')
-        pList.value = projects
+// 创建新项目
+async function onCreateNewProject() {
+    formDialog.markSubmitted()
 
-        // 批量获取所有项目的仓库数量
-        const counts = await db.select<{ project_id: number; count: number }[]>(
-            'SELECT project_id, COUNT(*) as count FROM repositories GROUP BY project_id'
-        )
-
-        // 重置并更新计数
-        repositoryCounts.value = {}
-        counts.forEach(c => {
-            repositoryCounts.value[c.project_id] = c.count
-        })
-    } catch (error) {
-        toast.add({
-            severity: 'error',
-            summary: '加载失败',
-            detail: error as string,
-            life: 3000
-        })
-    }
-}
-
-const getRepositoryCount = (projectId: number) => {
-    return repositoryCounts.value[projectId] || 0
-}
-
-const onCreateNewProject = () => {
-    formSubmitted.value = true
-
-    if (!model.value.projectName) {
+    if (!formDialog.formData.projectName) {
         return
     }
 
-    db.execute('INSERT OR IGNORE INTO projects (name, description) VALUES ($1, $2) ', [
-        model.value.projectName,
-        model.value.description,
-    ])
-        .then((res) => {
-            if (res.rowsAffected < 1) {
-                toast.add({
-                    severity: 'error',
-                    summary: '创建失败',
-                    detail: '项目名称可能已存在',
-                    life: 3000,
-                })
-                return
-            }
-            toast.add({
-                severity: 'success',
-                summary: '创建成功',
-                detail: `项目 "${model.value.projectName}" 已创建`,
-                life: 3000,
-            })
-            model.value.description = ''
-            model.value.projectName = ''
-            formSubmitted.value = false
-            showModal.value = false
-            getProjectList()
-            // 通知其他组件数据已更新
-            eventBus.emit(Events.PROJECT_CREATED, model.value.projectName)
-        })
-        .catch(() => {
-            toast.add({ severity: 'error', summary: '创建失败', detail: '请稍后重试', life: 3000 })
-        })
+    const success = await project.createProject(
+        formDialog.formData.projectName,
+        formDialog.formData.description
+    )
+
+    if (success) {
+        formDialog.closeAndReset()
+    }
 }
 
-const openProject = (item: Project) => {
+// 打开项目
+function openProject(item: Project) {
     router.push({ path: '/pd/' + item.id })
 }
 
-// 删除项目
-const openDeleteDialog = (item: Project) => {
+// 打开删除确认对话框
+function openDeleteDialog(item: Project) {
     projectToDelete.value = item
-    showDeleteConfirm.value = true
+    deleteDialog.open()
 }
 
-const confirmDeleteProject = async () => {
+// 确认删除项目
+async function confirmDeleteProject() {
     if (!projectToDelete.value) return
 
-    // 保存项目信息用于事件通知
-    const deletedProject = projectToDelete.value
-
-    try {
-        // 先删除关联的仓库记录
-        await db.execute('DELETE FROM repositories WHERE project_id = $1', [deletedProject.id])
-        // 再删除项目
-        await db.execute('DELETE FROM projects WHERE id = $1', [deletedProject.id])
-
-        toast.add({
-            severity: 'success',
-            summary: '删除成功',
-            detail: `项目 "${deletedProject.name}" 已删除`,
-            life: 3000
-        })
-        showDeleteConfirm.value = false
-        projectToDelete.value = null
-        getProjectList()
-        // 通知其他组件数据已更新（使用保存的项目信息）
-        eventBus.emit(Events.PROJECT_DELETED, deletedProject)
-    } catch (error) {
-        toast.add({
-            severity: 'error',
-            summary: '删除失败',
-            detail: error as string,
-            life: 3000
-        })
-    }
+    await project.deleteProject(projectToDelete.value)
+    deleteDialog.close()
+    projectToDelete.value = null
 }
 
 // 返回首页
-const goHome = () => {
+function goHome() {
     router.push('/')
 }
 
-const search = ref('')
-
-// 使用工具函数中的 debounce
-const searchProject = debounce(async () => {
-    if (!search.value.trim()) {
-        getProjectList()
-        return
-    }
-
-    try {
-        const res = await db.select<Project[]>(
-            'SELECT * FROM projects WHERE name LIKE $1',
-            [`%${search.value}%`]
-        )
-        pList.value = res
-
-        // 批量获取仓库数量
-        const counts = await db.select<{ project_id: number; count: number }[]>(
-            'SELECT project_id, COUNT(*) as count FROM repositories GROUP BY project_id'
-        )
-
-        repositoryCounts.value = {}
-        counts.forEach(c => {
-            repositoryCounts.value[c.project_id] = c.count
-        })
-    } catch (error) {
-        toast.add({
-            severity: 'error',
-            summary: '搜索失败',
-            detail: error as string,
-            life: 3000
-        })
-    }
+// 处理搜索输入（使用防抖）
+const searchProject = debounce(() => {
+    project.searchProjects(search.value)
 }, 300)
 </script>
 

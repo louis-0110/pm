@@ -343,17 +343,30 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useToast } from 'primevue/usetoast'
-import dbFn from '@/db'
-import { gitApi, svnApi, systemApi } from '@/api'
+import { systemApi } from '@/api'
 import { formatSvnDate } from '@/utils'
 import { eventBus, Events } from '@/utils/eventBus'
+import { useToast } from '@/composables/useToast'
+import { useVcs } from '@/composables/useVcs'
+import { MESSAGES } from '@/constants/messages'
 import type { Repository, GitStatus, SvnStatus } from '@/types'
+import type { DatabaseInstance } from '@/composables/useDatabase'
 
-const db = await dbFn
 const toast = useToast()
+const vcs = useVcs()
 const route = useRoute()
 const router = useRouter()
+
+// 数据库缓存
+let dbCache: DatabaseInstance | null = null
+
+async function getDb(): Promise<DatabaseInstance> {
+    if (!dbCache) {
+        const { useDatabase } = await import('@/composables/useDatabase')
+        dbCache = await useDatabase()
+    }
+    return dbCache
+}
 
 // 仓库信息
 const repositoryInfo = ref<Repository | null>(null)
@@ -387,15 +400,16 @@ const diffOutput = ref('')
 
 // 加载仓库信息
 async function loadRepositoryInfo() {
-    const res = await db.select<Repository[]>('SELECT * FROM repositories WHERE id = $1', [route.params.repoId])
-    if (res && res.length > 0) {
-        repositoryInfo.value = res[0]
-        editName.value = res[0].name
+    const db = await getDb()
+    repositoryInfo.value = await db.repository.findById(route.params.repoId as string)
+
+    if (repositoryInfo.value) {
+        editName.value = repositoryInfo.value.name
 
         // 根据 VCS 类型加载状态
-        if (res[0].vcs === 'git') {
+        if (repositoryInfo.value.vcs === 'git') {
             await loadGitStatus()
-        } else if (res[0].vcs === 'svn') {
+        } else if (repositoryInfo.value.vcs === 'svn') {
             await loadSvnStatus()
         }
     }
@@ -406,7 +420,10 @@ async function loadGitStatus() {
     if (!repositoryInfo.value) return
 
     try {
-        gitStatus.value = await gitApi.getStatus(repositoryInfo.value.path)
+        const status = await vcs.getStatus(repositoryInfo.value.vcs, repositoryInfo.value.path)
+        if (status) {
+            gitStatus.value = status as GitStatus
+        }
     } catch (error) {
         // 静默失败
     }
@@ -417,7 +434,10 @@ async function loadSvnStatus() {
     if (!repositoryInfo.value) return
 
     try {
-        svnStatus.value = await svnApi.getStatus(repositoryInfo.value.path)
+        const status = await vcs.getStatus(repositoryInfo.value.vcs, repositoryInfo.value.path)
+        if (status) {
+            svnStatus.value = status as SvnStatus
+        }
     } catch (error) {
         // 静默失败
     }
@@ -434,9 +454,9 @@ async function copyPath() {
 
     try {
         await navigator.clipboard.writeText(repositoryInfo.value.path)
-        toast.add({ severity: 'success', summary: '复制成功', detail: '路径已复制到剪贴板', life: 3000 })
+        toast.copySuccess()
     } catch (error) {
-        toast.add({ severity: 'error', summary: '复制失败', detail: error as string, life: 3000 })
+        toast.operationFailed('复制', error as string)
     }
 }
 
@@ -488,10 +508,11 @@ async function updateRepositoryName() {
         return
     }
 
-    await db.execute('UPDATE repositories SET name = $1 WHERE id = $2', [editName.value, repositoryInfo.value.id])
+    const db = await getDb()
+    await db.repository.updateName(repositoryInfo.value.id, editName.value)
     showEditDialog.value = false
     repositoryInfo.value.name = editName.value
-    toast.add({ severity: 'success', summary: '更新成功', detail: '仓库名称已更新', life: 3000 })
+    toast.showSuccess(MESSAGES.SUCCESS.UPDATE, MESSAGES.REPOSITORY.UPDATED)
 }
 
 // 拉取
@@ -502,13 +523,13 @@ async function handlePull() {
     const repo = repositoryInfo.value
 
     try {
-        const result = await gitApi.pull(repo.path)
-        toast.add({ severity: 'success', summary: '拉取成功', detail: result, life: 3000 })
+        const result = await vcs.pull(repo.vcs, repo.path)
+        toast.showSuccess('拉取成功', result)
         await loadGitStatus()
         // 通知其他组件刷新该仓库的状态
         eventBus.emit(Events.REFRESH_REPOSITORY_STATUS, repo.id)
     } catch (error) {
-        toast.add({ severity: 'error', summary: '拉取失败', detail: error as string, life: 3000 })
+        toast.operationFailed('拉取', error as string)
     } finally {
         loading.value.pull = false
     }
@@ -522,13 +543,13 @@ async function handlePush() {
     const repo = repositoryInfo.value
 
     try {
-        const result = await gitApi.push(repo.path)
-        toast.add({ severity: 'success', summary: '推送成功', detail: result, life: 3000 })
+        const result = await vcs.push(repo.vcs, repo.path)
+        toast.showSuccess('推送成功', result)
         await loadGitStatus()
         // 通知其他组件刷新该仓库的状态
         eventBus.emit(Events.REFRESH_REPOSITORY_STATUS, repo.id)
     } catch (error) {
-        toast.add({ severity: 'error', summary: '推送失败', detail: error as string, life: 3000 })
+        toast.operationFailed('推送', error as string)
     } finally {
         loading.value.push = false
     }
@@ -548,26 +569,23 @@ async function handleCommit() {
     const repo = repositoryInfo.value
 
     try {
-        let result: string
+        const result = await vcs.commit(repo.vcs, repo.path, commitMessage.value)
 
+        // 重新加载状态
         if (repo.vcs === 'git') {
-            result = await gitApi.commit(repo.path, commitMessage.value)
             await loadGitStatus()
         } else if (repo.vcs === 'svn') {
-            result = await svnApi.commit(repo.path, commitMessage.value)
             await loadSvnStatus()
-        } else {
-            throw new Error('不支持的版本控制系统')
         }
 
-        toast.add({ severity: 'success', summary: '提交成功', detail: result, life: 3000 })
+        toast.showSuccess('提交成功', result)
         showCommitDialog.value = false
         commitMessage.value = ''
         commitFormSubmitted.value = false
         // 通知其他组件刷新该仓库的状态
         eventBus.emit(Events.REFRESH_REPOSITORY_STATUS, repo.id)
     } catch (error) {
-        toast.add({ severity: 'error', summary: '提交失败', detail: error as string, life: 3000 })
+        toast.operationFailed('提交', error as string)
     } finally {
         loading.value.commit = false
     }
@@ -580,13 +598,13 @@ async function handleUpdate() {
     loading.value.update = true
     const repo = repositoryInfo.value
     try {
-        const result = await svnApi.update(repositoryInfo.value.path)
-        toast.add({ severity: 'success', summary: '更新成功', detail: result, life: 3000 })
+        const result = await vcs.pull(repo.vcs, repositoryInfo.value.path)
+        toast.showSuccess('更新成功', result)
         await loadSvnStatus()
         // 通知其他组件刷新该仓库的状态
         eventBus.emit(Events.REFRESH_REPOSITORY_STATUS, repo.id)
     } catch (error) {
-        toast.add({ severity: 'error', summary: '更新失败', detail: error as string, life: 3000 })
+        toast.operationFailed('更新', error as string)
     } finally {
         loading.value.update = false
     }
@@ -598,9 +616,9 @@ async function handleTerminal() {
 
     try {
         await systemApi.openTerminal(repositoryInfo.value.path)
-        toast.add({ severity: 'success', summary: '打开成功', detail: '终端已启动', life: 3000 })
+        toast.showSuccess('打开成功', '终端已启动')
     } catch (error) {
-        toast.add({ severity: 'error', summary: '打开失败', detail: error as string, life: 3000 })
+        toast.operationFailed('打开终端', error as string)
     }
 }
 
@@ -610,9 +628,9 @@ async function handleOpenVscode() {
 
     try {
         await systemApi.openInVscode(repositoryInfo.value.path)
-        toast.add({ severity: 'success', summary: '打开成功', detail: 'VSCode 已启动', life: 3000 })
+        toast.openSuccess(repositoryInfo.value.path)
     } catch (error) {
-        toast.add({ severity: 'error', summary: '打开失败', detail: error as string, life: 3000 })
+        toast.operationFailed('打开', error as string)
     }
 }
 
@@ -626,16 +644,7 @@ async function handleDiff() {
     isOpeningDialog = true
 
     try {
-        let result: string
-
-        if (repositoryInfo.value.vcs === 'git') {
-            result = await gitApi.diff(repositoryInfo.value.path)
-        } else if (repositoryInfo.value.vcs === 'svn') {
-            result = await svnApi.diff(repositoryInfo.value.path)
-        } else {
-            throw new Error('不支持的版本控制系统')
-        }
-
+        const result = await vcs.diff(repositoryInfo.value.vcs, repositoryInfo.value.path)
         diffOutput.value = result
 
         // 成功后打开对话框
@@ -645,7 +654,7 @@ async function handleDiff() {
         })
     } catch (error) {
         isOpeningDialog = false
-        toast.add({ severity: 'error', summary: '获取失败', detail: error as string, life: 3000 })
+        toast.operationFailed('获取差异', error as string)
     }
 }
 
@@ -689,12 +698,7 @@ function handleProjectDeleted(deletedProject: any) {
 
     // 如果当前查看的仓库属于被删除的项目，返回首页（使用 == 而不是 === 以避免类型问题）
     if (repositoryInfo.value.project_id == deletedProject.id) {
-        toast.add({
-            severity: 'info',
-            summary: '项目已删除',
-            detail: '当前项目已被删除，返回首页',
-            life: 3000
-        })
+        toast.showInfo('项目已删除', '当前项目已被删除，返回首页')
         // 清空仓库信息
         repositoryInfo.value = null
         gitStatus.value = null
@@ -709,12 +713,7 @@ function handleRepositoryDeleted(deletedRepository: any) {
 
     // 如果当前查看的仓库被删除，返回项目详情页（使用 == 而不是 === 以避免类型问题）
     if (repositoryInfo.value.id == deletedRepository.id) {
-        toast.add({
-            severity: 'info',
-            summary: '仓库已删除',
-            detail: '当前仓库已被删除，返回项目详情',
-            life: 3000
-        })
+        toast.showInfo('仓库已删除', '当前仓库已被删除，返回项目详情')
         // 先保存项目ID，再清空仓库信息
         const projectId = repositoryInfo.value.project_id
         repositoryInfo.value = null

@@ -545,20 +545,35 @@
 </template>
 
 <script setup lang="ts">
-import dbFn from '@/db'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readDir } from '@tauri-apps/plugin-fs'
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useToast } from 'primevue/usetoast'
-import { gitApi, svnApi, systemApi } from '@/api'
+import { systemApi } from '@/api'
 import { eventBus, Events } from '@/utils/eventBus'
+import { useDialog, useFormDialog } from '@/composables/useDialog'
+import { useToast } from '@/composables/useToast'
+import { useVcs } from '@/composables/useVcs'
+import { MESSAGES } from '@/constants/messages'
+import { getVcsLabel } from '@/constants/vcs'
 import type { Project, Repository, GitStatus, SvnStatus } from '@/types'
+import type { DatabaseInstance } from '@/composables/useDatabase'
 
-const db = await dbFn
 const toast = useToast()
+const vcs = useVcs()
 const route = useRoute()
 const router = useRouter()
+
+// 数据库缓存
+let dbCache: DatabaseInstance | null = null
+
+async function getDb(): Promise<DatabaseInstance> {
+    if (!dbCache) {
+        const { useDatabase } = await import('@/composables/useDatabase')
+        dbCache = await useDatabase()
+    }
+    return dbCache
+}
 
 // Git 状态存储
 const gitStatuses = ref<Map<string, GitStatus>>(new Map())
@@ -581,19 +596,9 @@ const showBatchResults = ref(false)
 async function openPjWithVscode(path: string) {
     try {
         await systemApi.openInVscode(path)
-        toast.add({
-            severity: 'success',
-            summary: '打开成功',
-            detail: 'VSCode 已启动',
-            life: 3000
-        })
+        toast.openSuccess(path)
     } catch (error) {
-        toast.add({
-            severity: 'error',
-            summary: '打开失败',
-            detail: error as string,
-            life: 5000
-        })
+        toast.operationFailed('打开', error as string)
     }
 }
 
@@ -602,13 +607,13 @@ async function openPjWithFolder(path: string) {
 }
 
 const getProjectInfo = async (id: string) => {
-    const res = await db.select<Project[]>('SELECT * FROM projects WHERE id = $1', [id])
-    projectInfo.value = res[0] || null
+    const db = await getDb()
+    projectInfo.value = await db.project.findById(id)
 }
 
 const getRepositories = async (id: number | string) => {
-    const res = await db.select<Repository[]>('SELECT * FROM repositories WHERE project_id = $1', [id])
-    repositoryList.value = res
+    const db = await getDb()
+    repositoryList.value = await db.repository.findByProjectId(id)
 }
 
 // ==================== Dialog 状态 ====================
@@ -674,12 +679,7 @@ function handleProjectDeleted(deletedProject: any) {
 
     // 如果当前查看的项目被删除，返回首页（使用 == 而不是 === 以避免类型问题）
     if (projectInfo.value.id == deletedProject.id) {
-        toast.add({
-            severity: 'info',
-            summary: '项目已删除',
-            detail: '当前项目已被删除，返回首页',
-            life: 3000
-        })
+        toast.showInfo('项目已删除', '当前项目已被删除，返回首页')
         // 清空项目信息
         projectInfo.value = null
         repositoryList.value = []
@@ -719,7 +719,7 @@ async function onCreateNewRepository() {
         isCloning.value = true
 
         // 显示进度对话框
-        const vcsType = newRepository.value.vcs === 'git' ? 'Git' : 'SVN'
+        const vcsType = getVcsLabel(newRepository.value.vcs as 'git' | 'svn' | '')
         cloneProgress.value = {
             show: true,
             status: `正在${vcsType === 'Git' ? '克隆' : '检出'}仓库...`,
@@ -727,45 +727,27 @@ async function onCreateNewRepository() {
         }
 
         try {
-            // 执行克隆
-            if (newRepository.value.vcs === 'git') {
-                await gitApi.clone(cloneUrl.value, cloneTargetPath.value)
-            } else if (newRepository.value.vcs === 'svn') {
-                await svnApi.checkout(cloneUrl.value, cloneTargetPath.value)
-            } else {
-                throw new Error('无法识别的仓库类型')
-            }
+            // 使用统一的 VCS 接口
+            await vcs.clone(newRepository.value.vcs as 'git' | 'svn' | '', cloneUrl.value, cloneTargetPath.value)
 
             // 克隆成功，保存到数据库
             cloneProgress.value.status = '保存仓库信息...'
             cloneProgress.value.details = '正在将仓库添加到项目...'
 
+            const db = await getDb()
             const repoPath = cloneTargetPath.value
-            const res = await db.execute(
-                'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
-                [
-                    newRepository.value.name,
-                    repoPath,
-                    cloneUrl.value,
-                    newRepository.value.project_id,
-                    newRepository.value.vcs,
-                ],
-            )
+            const repository = await db.repository.create({
+                name: newRepository.value.name,
+                path: repoPath,
+                url: cloneUrl.value,
+                project_id: Number(newRepository.value.project_id),
+                vcs: newRepository.value.vcs as 'git' | 'svn' | ''
+            })
 
-            if (res.rowsAffected < 1) {
-                toast.add({
-                    severity: 'warn',
-                    summary: '克隆成功但添加失败',
-                    detail: '仓库已克隆但可能已存在于列表中',
-                    life: 3000,
-                })
+            if (!repository) {
+                toast.showWarning('克隆成功但添加失败', '仓库已克隆但可能已存在于列表中')
             } else {
-                toast.add({
-                    severity: 'success',
-                    summary: '克隆成功',
-                    detail: `仓库 "${newRepository.value.name}" 已克隆并添加`,
-                    life: 3000,
-                })
+                toast.showSuccess(MESSAGES.REPOSITORY.CLONE_SUCCESS, `仓库 "${newRepository.value.name}" 已克隆并添加`)
             }
 
             isShowRepository.value = false
@@ -773,15 +755,10 @@ async function onCreateNewRepository() {
             // 刷新仓库列表
             if (projectInfo.value) {
                 await getRepositories(projectInfo.value.id)
-                eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
+                eventBus.emit(Events.REPOSITORY_ADDED, repository)
             }
         } catch (error) {
-            toast.add({
-                severity: 'error',
-                summary: '克隆失败',
-                detail: error as string,
-                life: 5000,
-            })
+            toast.operationFailed(MESSAGES.REPOSITORY.CLONE_FAILED, error as string)
         } finally {
             isCloning.value = false
             cloneProgress.value.show = false
@@ -790,37 +767,27 @@ async function onCreateNewRepository() {
     }
 
     // 本地路径模式
-    const res = await db.execute(
-        'INSERT OR IGNORE INTO repositories (name, path, url, project_id, vcs) VALUES ($1, $2, $3, $4, $5) ',
-        [
-            newRepository.value.name,
-            newRepository.value.path,
-            newRepository.value.url || null,
-            newRepository.value.project_id,
-            newRepository.value.vcs,
-        ],
-    )
-    if (res.rowsAffected < 1) {
-        toast.add({
-            severity: 'error',
-            summary: '添加失败',
-            detail: '该仓库可能已存在',
-            life: 3000,
-        })
+    const db = await getDb()
+    const repository = await db.repository.create({
+        name: newRepository.value.name,
+        path: newRepository.value.path,
+        url: newRepository.value.url || undefined,
+        project_id: Number(newRepository.value.project_id),
+        vcs: newRepository.value.vcs as 'git' | 'svn' | ''
+    })
+
+    if (!repository) {
+        toast.showWarning(MESSAGES.ERROR.CREATE, '该仓库可能已存在')
         return
     }
-    toast.add({
-        severity: 'success',
-        summary: '添加成功',
-        detail: `仓库 "${newRepository.value.name}" 已添加`,
-        life: 3000,
-    })
+
+    toast.showSuccess(MESSAGES.SUCCESS.CREATE, MESSAGES.REPOSITORY.ADDED)
     isShowRepository.value = false
     // 手动重新获取仓库列表，而不是触发 watchEffect
     if (projectInfo.value) {
         await getRepositories(projectInfo.value.id)
         // 通知其他组件数据已更新
-        eventBus.emit(Events.REPOSITORY_ADDED, newRepository.value)
+        eventBus.emit(Events.REPOSITORY_ADDED, repository)
     }
 }
 
@@ -941,12 +908,7 @@ async function copySvnCommand() {
 
     try {
         await navigator.clipboard.writeText(command)
-        toast.add({
-            severity: 'success',
-            summary: '复制成功',
-            detail: '命令已复制到剪贴板，请在命令行中粘贴执行',
-            life: 3000
-        })
+        toast.copySuccess()
     } catch (error) {
         // 如果 clipboard API 不可用，使用传统方法
         const textarea = document.createElement('textarea')
@@ -958,19 +920,9 @@ async function copySvnCommand() {
 
         try {
             document.execCommand('copy')
-            toast.add({
-                severity: 'success',
-                summary: '复制成功',
-                detail: '命令已复制到剪贴板，请在命令行中粘贴执行',
-                life: 3000
-            })
+            toast.copySuccess()
         } catch (err) {
-            toast.add({
-                severity: 'error',
-                summary: '复制失败',
-                detail: '请手动复制命令',
-                life: 3000
-            })
+            toast.showError('复制失败', '请手动复制命令')
         }
 
         document.body.removeChild(textarea)
@@ -996,16 +948,12 @@ watch(cloneUrl, (newUrl) => {
 })
 
 const deleteRepository = async (item: Repository) => {
-    await db.execute('DELETE FROM repositories WHERE id = $1', [item.id])
+    const db = await getDb()
+    await db.repository.delete(item.id)
     await getRepositories(projectInfo.value!.id)
     // 通知其他组件数据已更新
     eventBus.emit(Events.REPOSITORY_DELETED, item)
-    toast.add({
-        severity: 'success',
-        summary: '删除成功',
-        detail: `仓库 "${item.name}" 已删除`,
-        life: 3000,
-    })
+    toast.deleteSuccess(item.name)
 }
 
 // ==================== 批量操作 ====================
@@ -1018,34 +966,21 @@ async function batchPull() {
     batchLoading.value.pull = true
     batchResults.value = []
 
-    const gitRepos = repositoryList.value.filter(r => r.vcs === 'git')
-    const svnRepos = repositoryList.value.filter(r => r.vcs === 'svn')
-
     let successCount = 0
     let failCount = 0
 
-    // 批量处理 Git 仓库
-    for (const repo of gitRepos) {
+    // 使用统一的 VCS 接口批量处理所有仓库
+    for (const repo of repositoryList.value) {
         try {
-            await gitApi.pull(repo.path)
-            batchResults.value.push({ repo, success: true, message: '拉取成功' })
+            const message = await vcs.pull(repo.vcs, repo.path)
+            batchResults.value.push({ repo, success: true, message })
             successCount++
             // 刷新状态
-            await loadGitStatus(repo)
-        } catch (error) {
-            batchResults.value.push({ repo, success: false, message: error as string })
-            failCount++
-        }
-    }
-
-    // 批量处理 SVN 仓库
-    for (const repo of svnRepos) {
-        try {
-            await svnApi.update(repo.path)
-            batchResults.value.push({ repo, success: true, message: '更新成功' })
-            successCount++
-            // 刷新状态
-            await loadSvnStatus(repo)
+            if (repo.vcs === 'git') {
+                await loadGitStatus(repo)
+            } else if (repo.vcs === 'svn') {
+                await loadSvnStatus(repo)
+            }
         } catch (error) {
             batchResults.value.push({ repo, success: false, message: error as string })
             failCount++
@@ -1056,20 +991,10 @@ async function batchPull() {
 
     // 显示汇总结果
     if (failCount === 0) {
-        toast.add({
-            severity: 'success',
-            summary: '批量操作成功',
-            detail: `成功更新 ${successCount} 个仓库`,
-            life: 3000
-        })
+        toast.showSuccess('批量操作成功', `成功更新 ${successCount} 个仓库`)
     } else {
         showBatchResults.value = true
-        toast.add({
-            severity: 'warn',
-            summary: '批量操作完成',
-            detail: `成功: ${successCount}, 失败: ${failCount}`,
-            life: 5000
-        })
+        toast.showWarning('批量操作完成', `成功: ${successCount}, 失败: ${failCount}`)
     }
 }
 
@@ -1082,12 +1007,7 @@ async function batchPush() {
     // 只推送 Git 仓库
     const gitRepos = repositoryList.value.filter(r => r.vcs === 'git')
     if (!gitRepos.length) {
-        toast.add({
-            severity: 'info',
-            summary: '没有 Git 仓库',
-            detail: 'SVN 仓库不支持推送操作',
-            life: 3000
-        })
+        toast.showInfo('没有 Git 仓库', MESSAGES.REPOSITORY.SVN_NO_PUSH)
         return
     }
 
@@ -1099,8 +1019,8 @@ async function batchPush() {
 
     for (const repo of gitRepos) {
         try {
-            await gitApi.push(repo.path)
-            batchResults.value.push({ repo, success: true, message: '推送成功' })
+            const message = await vcs.push(repo.vcs, repo.path)
+            batchResults.value.push({ repo, success: true, message })
             successCount++
             // 刷新状态
             await loadGitStatus(repo)
@@ -1114,20 +1034,10 @@ async function batchPush() {
 
     // 显示汇总结果
     if (failCount === 0) {
-        toast.add({
-            severity: 'success',
-            summary: '批量推送成功',
-            detail: `成功推送 ${successCount} 个仓库`,
-            life: 3000
-        })
+        toast.showSuccess('批量推送成功', `成功推送 ${successCount} 个仓库`)
     } else {
         showBatchResults.value = true
-        toast.add({
-            severity: 'warn',
-            summary: '批量推送完成',
-            detail: `成功: ${successCount}, 失败: ${failCount}`,
-            life: 5000
-        })
+        toast.showWarning('批量推送完成', `成功: ${successCount}, 失败: ${failCount}`)
     }
 }
 
@@ -1156,13 +1066,11 @@ async function onUpdatePjName() {
         return
     }
 
-    await db.execute('UPDATE repositories SET name = $1 where id = $2', [
-        pjInfo.value.name,
-        pjInfo.value.id,
-    ])
+    const db = await getDb()
+    await db.repository.updateName(Number(pjInfo.value.id), pjInfo.value.name)
     isShowRePjName.value = false
     getRepositories(route.params.id as string)
-    toast.add({ severity: 'success', summary: '更新成功', detail: '仓库名称已更新', life: 3000 })
+    toast.showSuccess(MESSAGES.SUCCESS.UPDATE, MESSAGES.REPOSITORY.UPDATED)
 }
 
 function onAfterLeave() {
@@ -1194,8 +1102,10 @@ async function loadGitStatus(repository: Repository) {
     if (repository.vcs !== 'git') return
 
     try {
-        const status = await gitApi.getStatus(repository.path)
-        gitStatuses.value.set(String(repository.id), status)
+        const status = await vcs.getStatus(repository.vcs, repository.path)
+        if (status) {
+            gitStatuses.value.set(String(repository.id), status as GitStatus)
+        }
     } catch (error) {
         // 静默失败
     }
@@ -1222,8 +1132,10 @@ async function loadSvnStatus(repository: Repository) {
     if (repository.vcs !== 'svn') return
 
     try {
-        const status = await svnApi.getStatus(repository.path)
-        svnStatuses.value.set(String(repository.id), status)
+        const status = await vcs.getStatus(repository.vcs, repository.path)
+        if (status) {
+            svnStatuses.value.set(String(repository.id), status as SvnStatus)
+        }
     } catch (error) {
         // 静默失败
     }

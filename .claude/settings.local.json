@@ -40,7 +40,21 @@
       "Bash(pnpm tauri build)",
       "Bash(pnpm tauri build --no-bundle)",
       "Bash(pnpm build)",
-      "Bash(rustc --version)"
+      "Bash(rustc --version)",
+      "Bash(find d:/Projects/pm/src/components -name \"*.vue\" -exec wc -l {} +)",
+      "Bash(find d:/Projects/pm/src -name \"*.vue\" -exec basename {} ;)",
+      "Bash(find d:/Projects/pm/src -name \"*.vue\" -exec wc -l {} +)",
+      "Bash(grep -c \"Dialog\" /d/Projects/pm/src/components/*.vue)",
+      "Bash(find /d/Projects/pm/src/components -name \"*.vue\" -exec wc -l {} +)",
+      "Bash(grep -n \"INSERT INTO\\\\|SELECT.*FROM\\\\|UPDATE.*SET\\\\|DELETE FROM\" /d/Projects/pm/src/components/*.vue)",
+      "Bash(pnpm dev)",
+      "Bash(curl -s http://localhost:1420)",
+      "Bash(git checkout src/components/PD.vue)",
+      "Bash(npm run dev)",
+      "Bash(curl -s http://localhost:142)",
+      "Bash(npx vite build --mode development)",
+      "Bash(cmd //c \"netstat -ano | findstr :1420\")",
+      "Bash(cmd //c \"taskkill /F /PID 29832\")"
     ]
   }
 }
